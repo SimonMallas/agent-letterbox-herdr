@@ -1,18 +1,49 @@
 # Agent Letterbox for Herdr
 
-## Ring the agent. Keep the message. Work as a team.
+## Ring the bell. Create the team.
+
+![Agent Letterbox for Herdr](assets/hero/letterbox-hero-1600x900.png)
 
 **Agent Letterbox for Herdr turns separate coding-agent terminals into a live team inside [Herdr](https://herdr.dev).**
 
-A message is saved safely on disk. When the recipient is live, Herdr receives one short instruction in its pane:
+## What it is
+
+Agent Letterbox is not a model, a new terminal, or a second agent harness. It is the coordination layer that lets the agents you already run hand work to one another without making you the human message relay.
+
+A task is written as a durable letter in the recipient's inbox. When that agent is live, Herdr delivers one short, generic instruction into its pane:
 
 ```text
-📬 letterbox doorbell: unacked delegate in <letterbox>/<agent>/inbox/ — please check
+📬 letterbox doorbell: check your inbox
 ```
 
-The agent checks the durable message, replies, and hands work onward.
+The agent wakes, reads the real task from disk, replies, and hands work onward. The terminal gets the knock; the inbox keeps the message.
 
-> **The doorbell makes it a team.**
+> **Agent mail that waits safely—and a bell brings it alive.**
+
+## Why it exists
+
+Without coordination, a multi-agent workflow means juggling panes, copying task text, remembering who owns what, and hoping an agent eventually sees a message.
+
+Directly injecting the full task into another terminal is fast, but the terminal becomes the only message record. Agent Letterbox keeps the fast part—the live doorbell—while putting the actual work in a durable, inspectable letter.
+
+```text
+full task → durable inbox letter
+live wake-up → short generic doorbell
+reply → sender inbox
+archive → recipient processed history
+```
+
+Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
+
+## What this opens up
+
+- **Near-instant coordination** — a live Herdr agent can receive a doorbell and begin its next turn without human copy/paste.
+- **Real handoffs** — implementation, review, research, QA, and fixes can move between agents as explicit owned work.
+- **Local pane orchestration** — Herdr's pane API targets the right live terminal while Letterbox keeps the durable record.
+- **Durable recovery** — if an agent is offline, restarting, busy, or misses the bell, the task remains in its inbox.
+- **Clear responsibility** — delegates require ACK/NACK; replies are delivered before originals are archived.
+- **Evidence over claims** — inbox, reply, and processed files show what happened even when an agent conversation is gone.
+- **Less human relay work** — you direct the team instead of pasting the same request between terminals.
 
 ## What you need
 
