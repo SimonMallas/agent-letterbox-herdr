@@ -51,7 +51,7 @@ Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 - A running local Herdr session (`herdr` started; local socket only)
 - Agents you already run in terminals (Claude Code, Pi, Grok, Hermes, …)
 
-No servers beyond Herdr’s local multiplexer. No SSH/remote transport, plugins marketplace, desktop apps, webhooks, cmux, or tmux.
+Agent Letterbox for Herdr is local-only and purpose-built for live Herdr agent teams.
 
 ## Install (copy / paste)
 
