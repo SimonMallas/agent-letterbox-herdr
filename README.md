@@ -24,15 +24,29 @@ No servers beyond Herdr’s local multiplexer. No SSH/remote transport, plugins 
 
 ## Install (copy / paste)
 
+### Option A — Recommended: copy/paste installer
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SimonMallas/agent-letterbox-herdr/main/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+letterbox herdr setup --agents pi,claude,grok,hermes --automatic-doorbells
+source "$HOME/.agent-letterbox/env.sh"
+```
+
+To update later, run the same installer again:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SimonMallas/agent-letterbox-herdr/main/install.sh | sh
+```
+
+### Option B — Manual Git install
+
 ```bash
 git clone https://github.com/SimonMallas/agent-letterbox-herdr.git \
   ~/Developer/agent-letterbox-herdr
 cd ~/Developer/agent-letterbox-herdr
-
 chmod +x bin/letterbox adapters/*.sh tests/*.sh
 export PATH="$PWD/bin:$PATH"
-
-# One-time team bootstrap (creates ~/.agent-letterbox and links the CLI)
 letterbox herdr setup --agents pi,claude,grok,hermes --automatic-doorbells
 source "$HOME/.agent-letterbox/env.sh"
 ```
