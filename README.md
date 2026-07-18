@@ -109,6 +109,7 @@ Requires a running local Herdr server (`herdr status` shows running).
 
 ## Learn more
 
+- [docs/why-letterbox.md](docs/why-letterbox.md) — why durable letters plus generic doorbells beat direct task injection
 - [docs/team-setup.md](docs/team-setup.md) — full Herdr team bootstrap
 - [docs/herdr.md](docs/herdr.md) — adapter details and safety
 - [SPEC.md](SPEC.md) — message format and reply-first semantics
