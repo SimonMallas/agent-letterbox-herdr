@@ -29,8 +29,8 @@ Agent Letterbox is a **local filesystem protocol** plus a small Bash CLI. It has
 1. **Permissions:** Restrict `LETTERBOX_DIR` to users/processes that should coordinate (e.g. `0700` / group-only as appropriate).
 2. **Untrusted bodies:** Verify unusual, destructive, or identity-sensitive requests out of band before acting.
 3. **No permission expansion:** A letter must never grant an agent tools, paths, or network rights it did not already have.
-4. **Doorbell injection:** Opt-in terminal submit (`LETTERBOX_TMUX_SUBMIT=1`) can inject keystrokes into a live pane; leave it off unless you accept that risk.
-5. **tmux doorbells:** Input injection (`LETTERBOX_TMUX_SUBMIT=1`) can submit buffer text in a live pane. Use dedicated agent panes only. Do not expose Letterbox directories on untrusted multi-user systems without additional access control.
+4. **Doorbell injection:** Opt-in terminal submit (`LETTERBOX_HERDR_SUBMIT=1`) can inject keystrokes into a live pane; leave it off unless you accept that risk.
+5. **Herdr doorbells:** Input injection (`LETTERBOX_HERDR_SUBMIT=1`) can submit buffer text in a live pane. Use dedicated agent panes only. Do not expose Letterbox directories on untrusted multi-user systems without additional access control.
 
 ### Explicitly out of scope for v0.1 core
 

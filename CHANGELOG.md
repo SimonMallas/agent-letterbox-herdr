@@ -1,18 +1,10 @@
 # Changelog
 
-All notable changes to Agent Letterbox for tmux are documented here.
+## [Unreleased] — herdr bootstrap
 
-## [Unreleased]
-
-### Added
-
-- `letterbox tmux setup`, `run`, `register`, `unregister`, and `status` for beginner team bootstrap.
-- Live pane self-registration registry (`tmux-agents.tsv`) preferred by `adapters/tmux.sh`.
-- Static `tmux-patterns.tsv` fallback.
-- Live tmux-run bootstrap and doorbell tests.
-- Beginner-friendly, copy/paste tmux installation guide.
-
-### Changed
-
-- Extracted the tmux-specific product from the former combined implementation.
-- Removed cmux, desktop, and webhook runtime code from this repository.
+- `letterbox herdr setup|run|register|unregister|status`
+- `adapters/herdr.sh` registry-first doorbell via Herdr CLI `pane send-text` + `pane send-keys enter`
+- Registry records agent, HERDR_PANE_ID, HERDR_SOCKET_PATH
+- Beginner README for local Herdr teams
+- Removed tmux/cmux runtime and docs from this product tree
+- Live test: `tests/test_herdr_bootstrap.sh`
