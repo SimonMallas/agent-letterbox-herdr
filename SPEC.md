@@ -55,7 +55,7 @@ A doorbell is optional. Its only terminal content should be a generic prompt suc
 📬 letterbox doorbell: unacked delegate in <letterbox>/<agent>/inbox/ — please check
 ```
 
-The tmux adapter implements this contract for live terminal agents. The shared filesystem remains the universal transport; an offline agent checks its inbox at startup or resume.
+The Herdr adapter implements this contract for live terminal agents. The shared filesystem remains the universal transport; an offline agent checks its inbox at startup or resume.
 
 ## Leases
 
