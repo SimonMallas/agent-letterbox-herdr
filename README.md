@@ -1,142 +1,104 @@
-# Agent Letterbox for tmux
+# Agent Letterbox for Herdr
 
-## Ring the bell. Create the team.
+## Ring the agent. Keep the message. Work as a team.
 
-![Agent Letterbox for tmux](assets/hero/letterbox-hero-1600x900.png)
+**Agent Letterbox for Herdr turns separate coding-agent terminals into a live team inside [Herdr](https://herdr.dev).**
 
-**Agent Letterbox for tmux turns separate coding-agent terminals into a live team.**
-
-A message is saved safely on disk. When the recipient is live, tmux sends one short instruction into its pane:
+A message is saved safely on disk. When the recipient is live, Herdr receives one short instruction in its pane:
 
 ```text
-📬 letterbox doorbell: check your inbox
+📬 letterbox doorbell: unacked delegate in <letterbox>/<agent>/inbox/ — please check
 ```
 
 The agent checks the durable message, replies, and hands work onward.
 
-> **Agent mail that waits safely—and a bell brings it alive.**
+> **The doorbell makes it a team.**
 
-## What this opens up
+## What you need
 
-- Near-instant coordination between live tmux agents
-- Agent-to-agent handoffs without a human copying task text between terminals
-- Durable messages that survive detached tmux sessions, restarts, and missed doorbells
-- Clear ownership through ACK/NACK and reply-first handling
-- A team that can run locally, over SSH, or on headless systems
+- Bash, Git, and **Herdr 0.7+** (`herdr --version`)
+- A running local Herdr session (`herdr` started; local socket only)
+- Agents you already run in terminals (Claude Code, Pi, Grok, Hermes, …)
 
-The automatic doorbell in this repository is **tmux only**. Ordinary terminals and desktop apps still receive durable mail, but need a manual/session-start check.
+No servers beyond Herdr’s local multiplexer. No SSH/remote transport, plugins marketplace, desktop apps, webhooks, cmux, or tmux.
 
----
-
-# Quick start: set up your tmux team
-
-You need Bash, Git, and tmux. No server, database, cloud account, or custom tmux layout is required.
-
-## Step 1 — Open a terminal and copy/paste this
-
-Open any terminal window. You can either copy/paste the whole block below yourself, **or ask an existing coding agent**:
-
-> Set up Agent Letterbox for tmux using the README Quick Start. Do not change my tmux layout.
+## Install (copy / paste)
 
 ```bash
-git clone https://github.com/SimonMallas/agent-letterbox-tmux.git \
-  ~/Developer/agent-letterbox-tmux
-cd ~/Developer/agent-letterbox-tmux
+git clone https://github.com/SimonMallas/agent-letterbox-herdr.git \
+  ~/Developer/agent-letterbox-herdr
+cd ~/Developer/agent-letterbox-herdr
+
 chmod +x bin/letterbox adapters/*.sh tests/*.sh
 export PATH="$PWD/bin:$PATH"
-letterbox tmux setup --agents pi,claude,grok,hermes --automatic-doorbells
+
+# One-time team bootstrap (creates ~/.agent-letterbox and links the CLI)
+letterbox herdr setup --agents pi,claude,grok,hermes --automatic-doorbells
 source "$HOME/.agent-letterbox/env.sh"
 ```
 
-This downloads a local copy and sets up the team. If you are new to GitHub, you do not need to understand Git first—copying the block is enough.
-
-If it is already downloaded:
-
-```bash
-cd ~/Developer/agent-letterbox-tmux
-git pull
-export PATH="$PWD/bin:$PATH"
-letterbox tmux setup --agents pi,claude,grok,hermes --automatic-doorbells
-source "$HOME/.agent-letterbox/env.sh"
-```
-
-Setup automatically creates one shared Letterbox, agent inboxes, the global `letterbox` launcher, the shared Agent Letterbox skill, and the live-pane registration registry.
-
-> `--automatic-doorbells` lets Letterbox type the generic doorbell line into a live agent pane. Use it only for dedicated agent panes: like any terminal-input tool, it can submit text already typed in a target terminal.
-
-Stay in this same terminal for the next step; you do not need to open another one yet.
-
-## Step 2 — Open tmux your way
-
-Open tmux and arrange agents however the task requires:
-
-```text
-one tmux session per agent
-multiple panes in one session
-separate windows
-any mix that suits the task
-```
-
-Agent Letterbox does not create, move, or resize your tmux layout.
-
-## Step 3 — Launch agents through Letterbox
-
-In each agent's chosen tmux pane, use the launcher:
-
-```bash
-letterbox tmux run pi -- pi
-letterbox tmux run claude -- claude
-letterbox tmux run grok -- grok
-letterbox tmux run hermes -- hermes
-```
-
-Copy and paste the appropriate command into each agent's chosen pane. The launcher gives the agent its identity, registers its current tmux pane, and starts the command. That is what lets Letterbox find and ring agents.
-
-## Step 4 — Send the first handoff
-
-From the Pi terminal:
-
-```bash
-printf '%s\n' 'Review src/auth.ts and report correctness findings.' |
-  LETTERBOX_AGENT=pi letterbox send claude delegate auth-review --ack --now
-```
-
-Claude receives a durable letter and a live tmux doorbell. To reply:
-
-```bash
-printf '%s\n' 'ACK: I will review it now.' |
-  letterbox reply <message-id-or-inbox-path> ack auth-review-ack --now
-```
-
-The reply reaches Pi before Claude's original letter is archived.
-
----
-
-## New or duplicate agents
-
-Give each new or duplicate session a unique identity:
-
-```bash
-letterbox tmux run pi-research -- pi
-letterbox tmux run pi-builder -- pi
-letterbox tmux run agent-zero -- agent-zero
-```
-
-Each live session self-registers its current tmux pane, avoiding title or session-name collisions.
-
-## Test the installation
+Check:
 
 ```bash
 letterbox --version
+herdr --version
+echo "$LETTERBOX_DIR"
+```
+
+## Launch agents (you choose the panes)
+
+Open Herdr and arrange agents however the task requires. In **each agent pane**:
+
+```bash
+source "$HOME/.agent-letterbox/env.sh"
+
+letterbox herdr run pi -- pi
+# other panes:
+letterbox herdr run claude -- claude
+letterbox herdr run grok -- grok
+letterbox herdr run hermes -- hermes
+```
+
+`herdr run` registers the current Herdr pane id **and** `HERDR_SOCKET_PATH` for live doorbells, then starts the command.
+
+If a pane was rebuilt:
+
+```bash
+letterbox herdr register pi
+letterbox herdr status
+```
+
+## Send a live handoff
+
+```bash
+source "$HOME/.agent-letterbox/env.sh"
+export LETTERBOX_AGENT=pi
+
+printf '%s\n' 'Review src/auth.ts and report correctness findings.' |
+  letterbox send claude delegate auth-review --ack --now
+```
+
+1. Letter lands in Claude’s inbox
+2. Doorbell is injected into Claude’s registered Herdr pane (`pane send-text` + `enter`)
+3. Claude ACKs / works / replies with `letterbox reply`
+4. Original letter is archived
+
+> `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only.
+
+## Test
+
+```bash
 make test
 ```
 
+Requires a running local Herdr server (`herdr status` shows running).
+
 ## Learn more
 
-- [docs/team-setup.md](docs/team-setup.md) — detailed tmux team setup
-- [docs/tmux.md](docs/tmux.md) — tmux adapter safety and behavior
+- [docs/team-setup.md](docs/team-setup.md) — full Herdr team bootstrap
+- [docs/herdr.md](docs/herdr.md) — adapter details and safety
 - [SPEC.md](SPEC.md) — message format and reply-first semantics
-- [SECURITY.md](SECURITY.md) — threat model and reporting
+- [SECURITY.md](SECURITY.md) — threat model
 
 ## License
 

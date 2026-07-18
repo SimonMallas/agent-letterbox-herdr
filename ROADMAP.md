@@ -1,24 +1,19 @@
-# Agent Letterbox for tmux roadmap
+# Agent Letterbox for Herdr roadmap
 
-## v0.1 scope
+## v0.1 scope (local)
 
-Agent Letterbox for tmux is a filesystem-first coordination system for live tmux terminal-agent teams.
+- Durable letters + reply-first protocol
+- `letterbox herdr setup|run|register|unregister|status`
+- Registry-first `adapters/herdr.sh` using `pane send-text` + `pane send-keys enter`
+- Local Herdr only
 
-**Supported:**
+## Not supported
 
-- Durable Markdown letters, reply-first handling, atomic publication, and advisory locks
-- `letterbox tmux setup` / `run` / `register` bootstrap with live pane registry
-- Automatic opt-in tmux `send-keys` doorbells (registry first, static patterns fallback)
-- Local and SSH/headless tmux workflows where users arrange tmux sessions themselves
+- SSH/remote Herdr session packaging
+- Plugins marketplace distribution as a dependency
+- cmux/tmux/desktop/webhook adapters in this tree
 
-**Not supported:**
+## Next
 
-- cmux integration (separate product tree)
-- Autonomous desktop-agent turns, webhooks, persistent watchers, relay services, or required daemons
-- Multi-machine file transport; SSH access alone does not synchronize Letterbox files
-
-## Next milestones
-
-1. Dogfood with real multi-agent tmux sessions, including SSH/headless use cases
-2. Review/import approved visual identity assets
-3. Prepare a separate public v0.1 release
+1. Dogfood with multi-agent Herdr layouts
+2. Public release prep

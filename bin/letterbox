@@ -33,88 +33,70 @@ frontmatter_value() {
   ' "$1"
 }
 canonical_dir() { (cd "$1" && pwd -P); }
-tmux_registry_path() { printf '%s' "${LETTERBOX_TMUX_REGISTRY:-$BOX/tmux-agents.tsv}"; }
-tmux_patterns_path() { printf '%s' "${LETTERBOX_TMUX_PATTERNS:-$BOX/tmux-patterns.tsv}"; }
+herdr_registry_path() { printf '%s' "${LETTERBOX_HERDR_REGISTRY:-$BOX/herdr-agents.tsv}"; }
+herdr_patterns_path() { printf '%s' "${LETTERBOX_HERDR_PATTERNS:-$BOX/herdr-patterns.tsv}"; }
 
-# Current pane target when running inside tmux (precise doorbell injection).
-tmux_current_target() {
-  # Resolve the pane this process is running in. Prefer TMUX_PANE; otherwise
-  # match pane_pid against this process or its ancestors (works headless).
-  [[ -n "${TMUX:-}" ]] || return 1
-  command -v tmux >/dev/null 2>&1 || return 1
-  if [[ -n "${TMUX_PANE:-}" ]]; then
-    printf '%s\n' "$TMUX_PANE"
-    return 0
-  fi
-  local p=$$ candidates="" pane pid
-  candidates=" $p "
-  while [[ "$p" -gt 1 ]]; do
-    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d "[:space:]")"
-    [[ -n "$p" ]] || break
-    candidates+=" $p "
-  done
-  while read -r pane pid; do
-    [[ -n "$pane" && -n "$pid" ]] || continue
-    case "$candidates" in
-      *" $pid "*) printf "%s\n" "$pane"; return 0;;
-    esac
-  done < <(tmux list-panes -a -F "#{pane_id} #{pane_pid}" 2>/dev/null)
-  tmux display-message -p "#{pane_id}" 2>/dev/null
+herdr_bin() { printf '%s' "${HERDR_BIN_PATH:-herdr}"; }
+
+need_herdr_cli() {
+  command -v "$(herdr_bin)" >/dev/null 2>&1 || die 'herdr is unavailable (install Herdr 0.7+ and ensure it is on PATH)'
 }
 
-tmux_target_live() {
-  local target="$1"
-  [[ -n "$target" ]] || return 1
-  command -v tmux >/dev/null 2>&1 || return 1
-  # Pane id (%N) or session/window.pane name.
-  if [[ "$target" == %* ]]; then
-    tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -Fx "$target" >/dev/null
+# Live check: pane still exists in the targeted Herdr session.
+herdr_pane_live() {
+  local pane_id="$1" socket="${2:-}"
+  need_herdr_cli
+  if [[ -n "$socket" ]]; then
+    HERDR_SOCKET_PATH="$socket" "$(herdr_bin)" pane get "$pane_id" >/dev/null 2>&1
   else
-    tmux has-session -t "$target" 2>/dev/null
+    "$(herdr_bin)" pane get "$pane_id" >/dev/null 2>&1
   fi
 }
 
-cmd_tmux_register() {
-  local agent="${1:?usage: letterbox tmux register <agent>}" registry target owner tmp session
+cmd_herdr_register() {
+  local agent="${1:?usage: letterbox herdr register <agent>}" registry pane socket tmp owner
   need_agent "$agent"
-  command -v tmux >/dev/null 2>&1 || die 'tmux is unavailable'
-  target="$(tmux_current_target)" || die 'run registration from inside a tmux pane (TMUX is unset)'
-  [[ -n "$target" ]] || die 'could not resolve current tmux pane id'
-  session="$(tmux display-message -p '#S' 2>/dev/null || true)"
+  need_herdr_cli
+  [[ "${HERDR_ENV:-}" == "1" ]] || die 'run registration from inside a Herdr-managed pane (HERDR_ENV=1 is unset)'
+  pane="${HERDR_PANE_ID:-}"
+  socket="${HERDR_SOCKET_PATH:-}"
+  [[ -n "$pane" ]] || die 'HERDR_PANE_ID is missing; run inside a Herdr pane'
+  [[ -n "$socket" ]] || die 'HERDR_SOCKET_PATH is missing; run inside a Herdr pane'
+  herdr_pane_live "$pane" "$socket" || die "herdr pane is not live: $pane"
   mkdir -p "$BOX/$agent/inbox" "$BOX/$agent/processed" "$BOX/locks"
-  registry="$(tmux_registry_path)"
+  registry="$(herdr_registry_path)"
   mkdir -p "$(dirname "$registry")"
   if [[ -f "$registry" ]]; then
-    owner="$(awk -F '\t' -v target="$target" '$2 == target { print $1; exit }' "$registry")"
-    [[ -z "$owner" || "$owner" == "$agent" ]] || die "tmux target $target is already registered to $owner"
+    owner="$(awk -F '\t' -v pane="$pane" -v sock="$socket" '$2 == pane && $3 == sock { print $1; exit }' "$registry")"
+    [[ -z "$owner" || "$owner" == "$agent" ]] || die "pane $pane on $socket is already registered to $owner"
   fi
-  tmp="$(mktemp "$(dirname "$registry")/.tmux-agents.tmp.XXXXXX")"
+  tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
   [[ -f "$registry" ]] && awk -F '\t' -v agent="$agent" '$1 != agent { print }' "$registry" > "$tmp"
-  # agent<TAB>pane_id<TAB>session_name<TAB>registered_at
-  printf '%s\t%s\t%s\t%s\n' "$agent" "$target" "${session:-}" "$(now)" >> "$tmp"
+  # agent<TAB>pane_id<TAB>socket_path<TAB>registered_at
+  printf '%s\t%s\t%s\t%s\n' "$agent" "$pane" "$socket" "$(now)" >> "$tmp"
   mv "$tmp" "$registry"
-  printf 'registered: %s → %s (session %s)\n' "$agent" "$target" "${session:-(unknown)}"
+  printf 'registered: %s → %s (socket %s)\n' "$agent" "$pane" "$socket"
 }
 
-cmd_tmux_status() {
-  local registry="$(tmux_registry_path)"
-  [[ -f "$registry" ]] || { printf 'no tmux registrations: %s\n' "$registry"; return; }
-  printf 'agent\ttarget\tsession\tregistered_at\n'
+cmd_herdr_status() {
+  local registry="$(herdr_registry_path)"
+  [[ -f "$registry" ]] || { printf 'no herdr registrations: %s\n' "$registry"; return; }
+  printf 'agent\tpane_id\tsocket_path\tregistered_at\n'
   cat "$registry"
 }
 
-cmd_tmux_unregister() {
-  local agent="${1:?usage: letterbox tmux unregister <agent>}" registry tmp
+cmd_herdr_unregister() {
+  local agent="${1:?usage: letterbox herdr unregister <agent>}" registry tmp
   need_agent "$agent"
-  registry="$(tmux_registry_path)"
-  [[ -f "$registry" ]] || { printf 'no tmux registration for %s\n' "$agent"; return; }
-  tmp="$(mktemp "$(dirname "$registry")/.tmux-agents.tmp.XXXXXX")"
+  registry="$(herdr_registry_path)"
+  [[ -f "$registry" ]] || { printf 'no herdr registration for %s\n' "$agent"; return; }
+  tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
   awk -F '\t' -v agent="$agent" '$1 != agent { print }' "$registry" > "$tmp"
   mv "$tmp" "$registry"
   printf 'unregistered: %s\n' "$agent"
 }
 
-cmd_tmux_setup() {
+cmd_herdr_setup() {
   local agents='' setup_dir="$HOME/.agent-letterbox" submit=false
   local skill_source="$SCRIPT_DIR/../skills/agent-letterbox"
   local skills_dir="${LETTERBOX_SKILLS_DIR:-$HOME/.agents/skills}" skill_target
@@ -124,12 +106,12 @@ cmd_tmux_setup() {
       --agents) agents="${2:?missing comma-separated agent list}"; shift;;
       --dir) setup_dir="${2:?missing directory}"; shift;;
       --submit|--automatic-doorbells) submit=true;;
-      *) die "usage: letterbox tmux setup --agents pi,claude,grok,hermes [--dir <path>] [--automatic-doorbells]";;
+      *) die "usage: letterbox herdr setup --agents pi,claude,grok,hermes [--dir <path>] [--automatic-doorbells]";;
     esac
     shift
   done
-  [[ -n "$agents" ]] || die 'tmux setup requires --agents'
-  command -v tmux >/dev/null 2>&1 || die 'tmux is unavailable'
+  [[ -n "$agents" ]] || die 'herdr setup requires --agents'
+  need_herdr_cli
   [[ -f "$skill_source/SKILL.md" ]] || die "bundled skill missing: $skill_source"
   local agent
   IFS=',' read -r -a agent_list <<< "$agents"
@@ -139,11 +121,11 @@ cmd_tmux_setup() {
   mkdir -p "$BOX" "$BOX/locks" "$(dirname "$DEFAULT_DIR_FILE")" "$launcher_dir"
   cmd_init "${agent_list[@]}" >/dev/null
   printf '%s\n' "$BOX" > "$DEFAULT_DIR_FILE"
-  : > "$BOX/tmux-agents.tsv"
-  if [[ ! -f "$BOX/tmux-patterns.tsv" ]]; then
-    cat > "$BOX/tmux-patterns.tsv" <<'PAT'
-# Optional static fallback: agent<TAB>tmux-session-name
-# Live self-registration (letterbox tmux run/register) is preferred.
+  : > "$BOX/herdr-agents.tsv"
+  if [[ ! -f "$BOX/herdr-patterns.tsv" ]]; then
+    cat > "$BOX/herdr-patterns.tsv" <<'PAT'
+# Optional static fallback: agent<TAB>herdr_pane_id
+# Prefer live self-registration: letterbox herdr run <agent> -- <command>
 PAT
   fi
   mkdir -p "$skills_dir"
@@ -168,70 +150,70 @@ PAT
     ln -s "$skill_source" "$skill_target"
   fi
   cat > "$BOX/env.sh" <<EOF
-# Generated by: letterbox tmux setup
+# Generated by: letterbox herdr setup
 export LETTERBOX_DIR='$BOX'
-export LETTERBOX_DOORBELL='$SCRIPT_DIR/../adapters/tmux.sh'
-export LETTERBOX_TMUX_REGISTRY='$BOX/tmux-agents.tsv'
-export LETTERBOX_TMUX_PATTERNS='$BOX/tmux-patterns.tsv'
+export LETTERBOX_DOORBELL='$SCRIPT_DIR/../adapters/herdr.sh'
+export LETTERBOX_HERDR_REGISTRY='$BOX/herdr-agents.tsv'
+export LETTERBOX_HERDR_PATTERNS='$BOX/herdr-patterns.tsv'
 export AGENT_LETTERBOX_SKILL='$skill_target'
 EOF
-  [[ "$submit" == true ]] && printf 'export LETTERBOX_TMUX_SUBMIT=1\n' >> "$BOX/env.sh"
+  [[ "$submit" == true ]] && printf 'export LETTERBOX_HERDR_SUBMIT=1\n' >> "$BOX/env.sh"
   cat > "$BOX/AGENT-LETTERBOX.md" <<'EOF'
-# Agent Letterbox startup rule (tmux)
+# Agent Letterbox startup rule (Herdr)
 
 The shared Agent Letterbox skill is installed at `~/.agents/skills/agent-letterbox`
 (or the configured `LETTERBOX_SKILLS_DIR`). Ensure your agent runtime loads global Agent Skills.
 
-You control your own tmux layout. Launch each agent inside the pane you choose:
+You control your own Herdr layout. Launch each agent inside the pane you choose:
 
 ```bash
 source ~/.agent-letterbox/env.sh   # or your LETTERBOX_DIR/env.sh
-letterbox tmux run <your-agent-id> -- <agent-command>
+letterbox herdr run <your-agent-id> -- <agent-command>
 ```
 
-That registers the current pane for live doorbells, then starts the agent.
+That registers the current Herdr pane (and socket) for live doorbells, then starts the agent.
 
 At resume, if the pane id changed:
 
 ```bash
-letterbox tmux register <your-agent-id>
+letterbox herdr register <your-agent-id>
 letterbox check
 ```
 
 For actionable letters, use `letterbox reply` with body text piped on stdin.
 Use `--now` on a reply only when the original letter priority is `now`.
 EOF
-  printf 'tmux team ready: %s\n' "$BOX"
+  printf 'herdr team ready: %s\n' "$BOX"
   printf 'Letterbox launcher linked: %s\n' "$launcher_target"
   printf 'Agent Letterbox skill linked: %s\n' "$skill_target"
   printf 'Source the environment:\n  source %s/env.sh\n' "$BOX"
   printf 'In each agent pane, launch with:\n'
-  printf '  letterbox tmux run <agent-id> -- <agent-command>\n'
+  printf '  letterbox herdr run <agent-id> -- <agent-command>\n'
   [[ "$submit" == true ]] || printf 'Automatic input is off. Re-run with --automatic-doorbells to enable it.\n'
 }
 
-cmd_tmux_run() {
-  local agent="${1:?usage: letterbox tmux run <agent> -- <command...>}"; shift
+cmd_herdr_run() {
+  local agent="${1:?usage: letterbox herdr run <agent> -- <command...>}"; shift
   need_agent "$agent"
-  [[ "${1:-}" == -- ]] || die 'tmux run requires -- before the agent command'
+  [[ "${1:-}" == -- ]] || die 'herdr run requires -- before the agent command'
   shift
-  [[ $# -gt 0 ]] || die 'tmux run requires an agent command'
+  [[ $# -gt 0 ]] || die 'herdr run requires an agent command'
   [[ -f "$BOX/env.sh" ]] && # shellcheck disable=SC1090
     source "$BOX/env.sh"
   BOX="${LETTERBOX_DIR:-$BOX}"
   export LETTERBOX_DIR="$BOX" LETTERBOX_AGENT="$agent"
-  cmd_tmux_register "$agent"
+  cmd_herdr_register "$agent"
   exec "$@"
 }
 
-cmd_tmux() {
+cmd_herdr() {
   case "${1:-}" in
-    setup) shift; cmd_tmux_setup "$@";;
-    run) shift; cmd_tmux_run "$@";;
-    register) shift; cmd_tmux_register "$@";;
-    unregister) shift; cmd_tmux_unregister "$@";;
-    status) shift; cmd_tmux_status "$@";;
-    *) die 'usage: letterbox tmux {setup|run|register|unregister|status} ...';;
+    setup) shift; cmd_herdr_setup "$@";;
+    run) shift; cmd_herdr_run "$@";;
+    register) shift; cmd_herdr_register "$@";;
+    unregister) shift; cmd_herdr_unregister "$@";;
+    status) shift; cmd_herdr_status "$@";;
+    *) die 'usage: letterbox herdr {setup|run|register|unregister|status} ...';;
   esac
 }
 
@@ -405,6 +387,6 @@ case "${1:-}" in
   --version|-V|version) cmd_version;;
   init) shift; cmd_init "$@";; send) shift; cmd_send "$@";; check) shift; cmd_check "$@";;
   reply) shift; cmd_reply "$@";; done) shift; cmd_done "$@";; lock) shift; cmd_lock "$@";; unlock) shift; cmd_unlock "$@";;
-  status) shift; cmd_status "$@";; tmux) shift; cmd_tmux "$@";;
-  *) printf 'usage: letterbox {init|send|check|reply|done|lock|unlock|status|tmux|--version} ...\n\ntmux: setup | run | register | unregister | status\n' >&2; exit 2;;
+  status) shift; cmd_status "$@";; herdr) shift; cmd_herdr "$@";;
+  *) printf 'usage: letterbox {init|send|check|reply|done|lock|unlock|status|herdr|--version} ...\n\nherdr: setup | run | register | unregister | status\n' >&2; exit 2;;
 esac

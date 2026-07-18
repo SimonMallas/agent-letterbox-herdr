@@ -1,0 +1,2 @@
+# Optional static fallback: agent<TAB>herdr_pane_id
+# Prefer live self-registration: letterbox herdr run <agent> -- <command>
