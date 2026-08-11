@@ -27,13 +27,32 @@ Without coordination, a multi-agent workflow means juggling panes, copying task 
 Directly injecting the full task into another terminal is fast, but the terminal becomes the only message record. Agent Letterbox keeps the fast part—the live doorbell—while putting the actual work in a durable, inspectable letter.
 
 ```text
-full task → durable inbox letter
+full task    → durable inbox letter
 live wake-up → short generic doorbell
-reply → sender inbox
-archive → recipient processed history
+reply        → sender inbox
+archive      → recipient processed history
 ```
 
 Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
+
+## v0.2 lifecycle in one screen
+
+Public v0.2 is a **correctness** release: acknowledgements no longer file work away.
+
+```text
+send task (requires_ack=true)
+  → recipient: reply ack     # accepted WIP; letter stays in inbox (.md.ack)
+  → recipient: does the work
+  → recipient: reply result  # terminal; letter moves to processed/
+```
+
+Non-task letters (`info` / `status` / received replies) are filed with no invented response:
+
+```bash
+letterbox file <id>
+```
+
+See [SPEC.md](SPEC.md) and [docs/lifecycle.md](docs/lifecycle.md).
 
 ## What this opens up
 
@@ -41,8 +60,8 @@ Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 - **Real handoffs** — implementation, review, research, QA, and fixes can move between agents as explicit owned work.
 - **Local pane orchestration** — Herdr's pane API targets the right live terminal while Letterbox keeps the durable record.
 - **Durable recovery** — if an agent is offline, restarting, busy, or misses the bell, the task remains in its inbox.
-- **Clear responsibility** — delegates require ACK/NACK; replies are delivered before originals are archived.
-- **Evidence over claims** — inbox, reply, and processed files show what happened even when an agent conversation is gone.
+- **Clear responsibility** — task letters require ACK/NACK/RESULT; ACK means in progress, not done.
+- **Evidence over claims** — inbox, reply, sidecar, and processed files show what happened even when an agent conversation is gone.
 - **Less human relay work** — you direct the team instead of pasting the same request between terminals.
 
 ## What you need
@@ -74,8 +93,8 @@ curl -fsSL https://raw.githubusercontent.com/SimonMallas/agent-letterbox-herdr/m
 
 ```bash
 git clone https://github.com/SimonMallas/agent-letterbox-herdr.git \
-  ~/Developer/agent-letterbox-herdr
-cd ~/Developer/agent-letterbox-herdr
+  ~/src/agent-letterbox-herdr
+cd ~/src/agent-letterbox-herdr
 chmod +x bin/letterbox adapters/*.sh tests/*.sh
 export PATH="$PWD/bin:$PATH"
 letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells
@@ -113,7 +132,7 @@ letterbox herdr register planner
 letterbox herdr status
 ```
 
-## Send a live handoff
+## Send a live handoff (ack, then result)
 
 ```bash
 source "$HOME/.agent-letterbox/env.sh"
@@ -123,12 +142,36 @@ printf '%s\n' 'Review src/auth.ts and report correctness findings.' |
   letterbox send reviewer delegate auth-review --ack --now
 ```
 
-1. Letter lands in the reviewer’s inbox
-2. Doorbell is injected into the reviewer’s registered Herdr pane (`pane send-text` + `enter`)
-3. The reviewer ACKs / works / replies with `letterbox reply`
-4. Original letter is archived
+Prefer `printf … | letterbox …` for bodies. Avoid unquoted heredocs when the text may contain `$` or backticks. The CLI owns frontmatter; only the body goes on stdin.
 
-> `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only.
+1. Letter lands in the reviewer’s inbox
+2. Doorbell is injected into the reviewer’s registered Herdr pane when submit is on (`pane send-text` + Enter)
+3. The reviewer accepts (non-terminal):
+
+```bash
+printf '%s\n' 'ACK: reviewing auth.ts now.' |
+  LETTERBOX_AGENT=reviewer letterbox reply <message-id-or-inbox-path> ack auth-review --now
+```
+
+4. The letter stays in inbox with an `.md.ack` sidecar (`letterbox check` shows `[ACCEPTED]`)
+5. When finished, close it:
+
+```bash
+printf '%s\n' 'RESULT: no critical issues; two nits in findings.md.' |
+  LETTERBOX_AGENT=reviewer letterbox reply <message-id-or-inbox-path> result auth-review --now
+```
+
+Only `nack` or final `result` moves the original letter to `processed/`.
+
+> `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only. Without it, the adapter prefers a notification toast over terminal input.
+
+## Pre-release note
+
+If you checked out this repository before the v0.2.0 tag, one behaviour has changed and it matters: **acknowledging a letter no longer files it away.** `letterbox reply <id> ack` now marks the letter as accepted work in progress and leaves it in the inbox; only `nack` and `result` close it. Previously an acknowledgement archived the letter, so accepted work disappeared from the inbox that was tracking it.
+
+There is no data migration. The message format is unchanged and your existing letters remain valid. Pull, and carry on.
+
+Two notes: your inbox may show more letters than before — those are letters an acknowledgement wrongly archived, and seeing them again is the fix working. And all agents in a team should run the same version. If you intentionally downgrade to v0.1, delete leftover `.md.ack` sidecars first.
 
 ## Test
 
@@ -140,11 +183,14 @@ Requires a running local Herdr server (`herdr status` shows running).
 
 ## Learn more
 
+- [docs/lifecycle.md](docs/lifecycle.md) — task vs non-task, ACK/NACK/RESULT, `file`
 - [docs/why-letterbox.md](docs/why-letterbox.md) — why durable letters plus generic doorbells beat direct task injection
 - [docs/team-setup.md](docs/team-setup.md) — full Herdr team bootstrap
-- [docs/herdr.md](docs/herdr.md) — adapter details and safety
-- [SPEC.md](SPEC.md) — message format and reply-first semantics
+- [docs/herdr.md](docs/herdr.md) — adapter details, registry/socket, safety, recovery
+- [SPEC.md](SPEC.md) — normative protocol (v0.2)
 - [SECURITY.md](SECURITY.md) — threat model
+- [ROADMAP.md](ROADMAP.md) — scope and deferred items
+- [CHANGELOG.md](CHANGELOG.md) — user-visible changes
 
 ## License
 
