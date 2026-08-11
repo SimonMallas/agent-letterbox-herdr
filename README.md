@@ -49,7 +49,7 @@ Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 
 - Bash, Git, and **Herdr 0.7+** (`herdr --version`)
 - A running local Herdr session (`herdr` started; local socket only)
-- Agents you already run in terminals (Claude Code, Pi, Grok, Hermes, …)
+- Agents you already run in terminals (any coding-agent CLI you already use)
 
 Agent Letterbox for Herdr is local-only and purpose-built for live Herdr agent teams.
 
@@ -60,7 +60,7 @@ Agent Letterbox for Herdr is local-only and purpose-built for live Herdr agent t
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SimonMallas/agent-letterbox-herdr/main/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
-letterbox herdr setup --agents pi,claude,grok,hermes --automatic-doorbells
+letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells
 source "$HOME/.agent-letterbox/env.sh"
 ```
 
@@ -78,7 +78,7 @@ git clone https://github.com/SimonMallas/agent-letterbox-herdr.git \
 cd ~/Developer/agent-letterbox-herdr
 chmod +x bin/letterbox adapters/*.sh tests/*.sh
 export PATH="$PWD/bin:$PATH"
-letterbox herdr setup --agents pi,claude,grok,hermes --automatic-doorbells
+letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells
 source "$HOME/.agent-letterbox/env.sh"
 ```
 
@@ -97,11 +97,11 @@ Open Herdr and arrange agents however the task requires. In **each agent pane**:
 ```bash
 source "$HOME/.agent-letterbox/env.sh"
 
-letterbox herdr run pi -- pi
+letterbox herdr run planner -- <your-agent-cli>
 # other panes:
-letterbox herdr run claude -- claude
-letterbox herdr run grok -- grok
-letterbox herdr run hermes -- hermes
+letterbox herdr run reviewer -- <your-agent-cli>
+letterbox herdr run builder -- <your-agent-cli>
+letterbox herdr run researcher -- <your-agent-cli>
 ```
 
 `herdr run` registers the current Herdr pane id **and** `HERDR_SOCKET_PATH` for live doorbells, then starts the command.
@@ -109,7 +109,7 @@ letterbox herdr run hermes -- hermes
 If a pane was rebuilt:
 
 ```bash
-letterbox herdr register pi
+letterbox herdr register planner
 letterbox herdr status
 ```
 
@@ -117,15 +117,15 @@ letterbox herdr status
 
 ```bash
 source "$HOME/.agent-letterbox/env.sh"
-export LETTERBOX_AGENT=pi
+export LETTERBOX_AGENT=planner
 
 printf '%s\n' 'Review src/auth.ts and report correctness findings.' |
-  letterbox send claude delegate auth-review --ack --now
+  letterbox send reviewer delegate auth-review --ack --now
 ```
 
-1. Letter lands in Claude’s inbox
-2. Doorbell is injected into Claude’s registered Herdr pane (`pane send-text` + `enter`)
-3. Claude ACKs / works / replies with `letterbox reply`
+1. Letter lands in the reviewer’s inbox
+2. Doorbell is injected into the reviewer’s registered Herdr pane (`pane send-text` + `enter`)
+3. The reviewer ACKs / works / replies with `letterbox reply`
 4. Original letter is archived
 
 > `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only.
