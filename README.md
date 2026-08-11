@@ -165,13 +165,9 @@ Only `nack` or final `result` moves the original letter to `processed/`.
 
 > `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only. Without it, the adapter prefers a notification toast over terminal input.
 
-## Pre-release note
+## Using a pre-release checkout
 
-If you checked out this repository before the v0.2.0 tag, one behaviour has changed and it matters: **acknowledging a letter no longer files it away.** `letterbox reply <id> ack` now marks the letter as accepted work in progress and leaves it in the inbox; only `nack` and `result` close it. Previously an acknowledgement archived the letter, so accepted work disappeared from the inbox that was tracking it.
-
-There is no data migration. The message format is unchanged and your existing letters remain valid. Pull, and carry on.
-
-Two notes: your inbox may show more letters than before — those are letters an acknowledgement wrongly archived, and seeing them again is the fix working. And all agents in a team should run the same version. If you intentionally downgrade to v0.1, delete leftover `.md.ack` sidecars first.
+If you installed an earlier checkout from `main`, reinstall from the current branch and use the lifecycle commands above. v0.2 adds an optional `thread` field to ownership replies; existing letters remain valid. Early scripts that send `ack`, `nack`, or `result` directly must use `letterbox reply` instead, and delegates must include `--ack`. All agents in one team should run the same v0.2 helper.
 
 ## Test
 
