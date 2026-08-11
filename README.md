@@ -35,7 +35,7 @@ archive      → recipient processed history
 
 Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 
-## v0.2 lifecycle in one screen
+## How a task moves
 
 Public v0.2 is a **correctness** release: acknowledgements no longer file work away.
 
