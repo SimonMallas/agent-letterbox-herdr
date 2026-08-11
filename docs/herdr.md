@@ -9,7 +9,7 @@ letter written to inbox
 → agent checks its durable inbox
 ```
 
-The terminal gets the knock; the inbox keeps the message. Doorbell delivery is best-effort. The letter on disk is the record.
+The terminal gets a ring; the inbox keeps the message. Doorbell delivery is best-effort. The letter on disk is the record.
 
 ## Lookup order
 
