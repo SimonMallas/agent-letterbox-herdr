@@ -27,5 +27,5 @@ else
 fi
 chmod +x "$install_dir/bin/letterbox" "$install_dir/adapters"/*.sh "$install_dir/tests"/*.sh
 printf '\nInstalled Agent Letterbox for Herdr.\n'
-printf 'Next run:\n\n  letterbox herdr setup --agents pi,claude,grok,hermes --automatic-doorbells\n\n'
+printf 'Next run:\n\n  letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells\n\n'
 printf 'If `letterbox` is not found, add %s to your PATH.\n' "$bin_dir"

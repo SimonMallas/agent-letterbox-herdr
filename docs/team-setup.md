@@ -10,7 +10,7 @@ This is the standard Agent Letterbox setup for a live **Herdr** agent team (loca
 chmod +x bin/letterbox adapters/*.sh tests/*.sh
 export PATH="$PWD/bin:$PATH"
 
-letterbox herdr setup --agents pi,claude,grok,hermes --automatic-doorbells
+letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells
 source ~/.agent-letterbox/env.sh
 ```
 
@@ -30,11 +30,14 @@ Also links `~/.local/bin/letterbox` and `~/.agents/skills/agent-letterbox`.
 
 ## Launch agents
 
-In each agent’s Herdr pane:
+In each agent’s Herdr pane, launch whatever coding-agent CLI you already run:
 
 ```bash
 source ~/.agent-letterbox/env.sh
-letterbox herdr run pi -- pi
+letterbox herdr run planner -- <your-agent-cli>
+letterbox herdr run reviewer -- <your-agent-cli>
+letterbox herdr run builder -- <your-agent-cli>
+letterbox herdr run researcher -- <your-agent-cli>
 ```
 
 ## Registry format
@@ -45,10 +48,10 @@ letterbox herdr run pi -- pi
 agent	pane_id	socket_path	registered_at
 ```
 
-Example:
+Example (paths are illustrative only):
 
 ```text
-pi	w1:p2	/Users/you/.config/herdr/herdr.sock	2026-07-18T12:00:00Z
+planner	w1:p2	/Users/you/.config/herdr/herdr.sock	2026-07-18T12:00:00Z
 ```
 
 The adapter uses the recorded socket so the correct local Herdr session is targeted.
