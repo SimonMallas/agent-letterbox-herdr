@@ -3,37 +3,17 @@
 # Separate from personal-data privacy tests. Baseline identical across
 # agent-letterbox-{cmux,tmux,herdr,zellij} public v0.3 ports.
 #
-# Fails make test with offending file:line for internal/private porting residue.
+# Scans EVERY tracked file (git ls-files; find fallback outside git) —
+# hidden files, dotted root dirs, and CI workflows included. Fails with
+# file:line for internal/private porting residue.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 self_name="$(basename "$0")"
 
-# Paths scanned (product surface only). This script is excluded from hits.
-paths=(
-  bin
-  adapters
-  docs
-  Makefile
-  SPEC.md
-  README.md
-  skills
-)
-for opt in CHANGELOG.md ROADMAP.md SECURITY.md CONTRIBUTING.md VERSION; do
-  [[ -e "$opt" ]] && paths+=("$opt")
-done
-# tests/ except this gate file (patterns live here by necessity)
-shopt -s nullglob
-for t in tests/*; do
-  base="$(basename "$t")"
-  [[ "$base" == "$self_name" ]] && continue
-  paths+=("$t")
-done
-shopt -u nullglob
-
 # Forbidden tokens (fixed baseline — do not weaken per-port).
-# Built from parts so this file is not a self-hit if ever scanned.
+# Built from parts so this file is not a self-hit when scanned.
 patterns=(
   "shared""-brain"
   "bus ""doorbell"
@@ -45,28 +25,34 @@ patterns=(
   "utc_""now"
 )
 
-search() {
-  local pat="$1"
-  shift
-  # grep only: rg -I means --no-filename (hits would lack the required
-  # file:line) and rg skips hidden files by default (dotfile residue would
-  # escape). grep -RFnI covers both: filename:line output, hidden files included.
-  grep -RFnI -- "$pat" "$@" 2>/dev/null || true
-}
+# Every tracked file, null-delimited (spaces in names survive). Outside a git
+# work tree, fall back to a find walk (still includes dotted/hidden files).
+files=()
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  while IFS= read -r -d '' f; do files+=("$f"); done < <(git ls-files -z)
+else
+  while IFS= read -r -d '' f; do files+=("${f#./}"); done \
+    < <(find . -path ./.git -prune -o -type f -print0)
+fi
+if (( ${#files[@]} == 0 )); then
+  echo "private-vocabulary: FAIL (no files enumerable)" >&2
+  exit 1
+fi
 
 fails=0
-echo "private-vocabulary sweep: scanning product paths..."
-
-for pat in "${patterns[@]}"; do
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    # Skip this gate file if it appears
-    case "$line" in
-      *"/tests/$self_name:"*|"tests/$self_name:"*) continue;;
-    esac
-    echo "FAIL: private vocabulary '$pat' at $line" >&2
-    fails=$((fails+1))
-  done < <(search "$pat" "${paths[@]}")
+echo "private-vocabulary sweep: scanning ${#files[@]} tracked file(s)..."
+for f in "${files[@]}"; do
+  [[ "$f" == "tests/$self_name" ]] && continue
+  [[ -f "$f" ]] || continue
+  for pat in "${patterns[@]}"; do
+    # grep only, per file: -H keeps the filename on every hit (file:line),
+    # -I skips binaries, hidden files are covered because enumeration is explicit.
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      echo "FAIL: private vocabulary '$pat' at $line" >&2
+      fails=$((fails+1))
+    done < <(grep -nFHI -- "$pat" "$f" 2>/dev/null || true)
+  done
 done
 
 if (( fails > 0 )); then
@@ -74,5 +60,5 @@ if (( fails > 0 )); then
   exit 1
 fi
 
-echo "private-vocabulary: PASS (no forbidden tokens in product paths)"
+echo "private-vocabulary: PASS (${#files[@]} files scanned, no forbidden tokens)"
 exit 0
