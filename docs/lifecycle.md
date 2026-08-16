@@ -1,4 +1,4 @@
-# Letter lifecycle (v0.2)
+# Letter lifecycle (v0.3)
 
 One page for the four verbs that change a letter's state.
 
@@ -32,8 +32,9 @@ Doorbell (optional) = wake-up only. Inbox file = source of truth.
 | `letterbox reply <id> nack` | Decline a task | Publish nack; move letter to `processed/`; clear sidecar |
 | `letterbox reply <id> result` | Finish a task | Publish result; move letter to `processed/`; clear sidecar |
 | `letterbox file <id>` | Non-task only | Move letter to `processed/`; no reply |
+| `letterbox reply <id> result\|nack` | Non-task one-shot close (v0.3) | Publish reply; move letter to `processed/` — no prior ACK |
 
-`letterbox check` is read-only. It labels task letters `[UNACKED]` or `[ACCEPTED]` and never counts `.md.ack` files as mail.
+`letterbox check` is read-only. It labels task letters `[UNACKED]` or `[ACCEPTED]`, lists open work live-first with stale items (>14d silent) last, and never counts `.md.ack` files as mail. It never prints bodies — `letterbox read <id|display-id|token>` prints the exact durable letter. `letterbox progress <ref> <one-line>` updates the `.md.ack` sidecar of accepted work; `letterbox nudge <ref>` re-rings an open letter without creating one.
 
 ## Happy path
 
@@ -75,6 +76,7 @@ LETTERBOX_AGENT=builder letterbox file <id>
 ## Guard rails
 
 - `file` refuses `requires_ack: true` — send terminal `nack`/`result` instead.
+- `file <path>` on an inbound `result`/`nack` requires `--read` (you assert you read it); an explicit id, display-id, or unique token files directly.
 - Legacy `done --reply` refuses a letter that already has `.md.ack` — use `reply … result|nack`.
 - Do not put GOAL/DONE-WHEN in doorbell text.
 - Do not archive after ACK only.

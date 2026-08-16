@@ -21,6 +21,8 @@ done
 grep -q 'thread: %s' "$helper" && THREAD_EMITTED=1 || THREAD_EMITTED=0
 grep -q 'use letterbox reply for ownership replies' "$helper" && REPLY_GUARD=1 || REPLY_GUARD=0
 grep -q 'delegate letters require --ack' "$helper" && ACK_GUARD=1 || ACK_GUARD=0
+grep -q 'cmd_nudge' "$helper" && V03_VERBS=1 || V03_VERBS=0
+grep -q 'doorbell_token_for_id' "$helper" && DOORBELL_TOKEN=1 || DOORBELL_TOKEN=0
 
 # --- 1. thread field => additive-compat wording required, no-format-change claims forbidden ---
 if (( THREAD_EMITTED )); then
@@ -54,6 +56,33 @@ if (( ACK_GUARD )); then
   (( ok )) && pass "delegate --ack requirement documented in CHANGELOG/README"
 else
   skip "helper has no delegate --ack guard — assertion dormant"
+fi
+
+# --- 4. v0.3 operational verbs => documented ---
+if (( V03_VERBS )); then
+  ok=1
+  for doc in README.md CHANGELOG.md SPEC.md; do
+    grep -q 'nudge' "$doc" || { fail "$doc does not document letterbox nudge"; ok=0; }
+    grep -q 'progress' "$doc" || { fail "$doc does not document letterbox progress"; ok=0; }
+  done
+  (( ok )) && pass "v0.3 operational verbs documented in README/CHANGELOG/SPEC"
+else
+  skip "helper has no v0.3 operational verbs — assertion dormant"
+fi
+
+# --- 5. additive doorbell token => dual-acceptance wording required ---
+if (( DOORBELL_TOKEN )); then
+  ok=1
+  for doc in README.md CHANGELOG.md SPEC.md; do
+    if ! { grep -qi 'token' "$doc" && grep -qiE 'prefix|pattern' "$doc"; }; then
+      fail "$doc lacks doorbell-token prefix/pattern acceptance wording"
+      ok=0
+    fi
+  done
+  grep -qi 'exact full-line equality' SPEC.md || { fail "SPEC.md does not name exact full-line equality as a hazard"; ok=0; }
+  (( ok )) && pass "doorbell token documented as additive with prefix/pattern acceptance"
+else
+  skip "helper has no doorbell token — assertion dormant"
 fi
 
 if (( fails > 0 )); then
