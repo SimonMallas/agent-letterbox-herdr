@@ -3,6 +3,11 @@
 # visible file, hidden dotfile, and .github workflow — failing with file:line —
 # and must PASS a clean tree. All expected-failure sub-run output is prefixed
 # [mut] so a clean outer `make test` log is never mistaken for a real failure.
+#
+# Worktree-cleanliness contract: this harness must leave the REAL worktree
+# index and tree untouched. The temp repo is built from `git archive HEAD` +
+# a fresh `git init` — NEVER copy a worktree's .git (a linked worktree's .git
+# is a pointer file; git commands in the copy then mutate the REAL index).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 gate_name="test_no_private_vocabulary.sh"
@@ -10,8 +15,16 @@ gate_name="test_no_private_vocabulary.sh"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/vocab-mut.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
-# Self-contained copy of the repo (including .git so ls-files enumeration runs).
-cp -R "$root"/. "$tmp/repo/"
+# Record real-worktree state before doing anything.
+before="$(git -C "$root" status --porcelain)"
+
+# Independent throwaway repo: committed tree only, fresh .git directory.
+mkdir -p "$tmp/repo"
+git -C "$root" archive HEAD | tar -x -C "$tmp/repo"
+git -C "$tmp/repo" init -q
+git -C "$tmp/repo" add -A
+git -C "$tmp/repo" -c user.name="mutation-harness" -c user.email="mutation-harness@local" \
+  commit -qm "seed" --no-verify
 
 run_gate() { # prints gate output with [mut] prefix; returns gate rc
   local out rc
@@ -71,6 +84,21 @@ if [[ "$hit" == *"docs/visible-residue.md:1:"* ]]; then
 else
   printf '%s\n' "$hit" | sed 's/^/[mut] | /'
   echo "FAIL: hit missing file:line" >&2
+  fails=$((fails+1))
+fi
+
+# 5. Worktree/index cleanliness: the real worktree must be byte-identical
+#    before and after — no staged, modified, or untracked accumulation.
+after="$(git -C "$root" status --porcelain)"
+if [[ "$after" == "$before" ]]; then
+  echo "PASS: real worktree/index untouched by harness"
+else
+  echo "FAIL: worktree/index changed by harness:" >&2
+  diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") >&2 || true
+  fails=$((fails+1))
+fi
+if printf '%s\n' "$after" | grep -q "residue"; then
+  echo "FAIL: residue path present in real worktree status" >&2
   fails=$((fails+1))
 fi
 
