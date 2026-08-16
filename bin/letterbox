@@ -18,10 +18,16 @@ elif [[ -f "$DEFAULT_DIR_FILE" ]]; then
 else
   BOX="$PWD/.letterbox"
 fi
+# Compare owned paths canonically: macOS resolves /tmp as /private/tmp and
+# LETTERBOX_DIR may itself live on a symlinked volume.
+if [[ -d "$BOX" ]]; then
+  BOX="$(cd "$BOX" && pwd -P)"
+fi
 ME="${LETTERBOX_AGENT:-}"
 SESSION="${LETTERBOX_SESSION:-}"
 REPLY_FILE=""
 REPLY_ALREADY=false
+REPLY_BODY=""
 LIFECYCLE_LOCK=""
 
 die() { printf 'letterbox: %s\n' "$*" >&2; exit 1; }
@@ -33,6 +39,137 @@ need_agent() { [[ "$1" =~ ^[a-z][a-z0-9-]*$ ]] || die "invalid agent name: $1"; 
 inbox_path() { printf '%s/%s/inbox' "$BOX" "$1"; }
 processed_path() { printf '%s/%s/processed' "$BOX" "$1"; }
 canonical_dir() { (cd "$1" && pwd -P); }
+
+sha256_str() { # stdin → hex digest (portable)
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    openssl dgst -sha256 | awk '{print $NF}'
+  fi
+}
+
+bounded_cmd() { # $1=seconds, rest=argv; 124 on timeout, 127 on missing (needs python3)
+  local secs="$1"; shift
+  command -v python3 >/dev/null 2>&1 || return 124
+  python3 -c '
+import os, signal, subprocess, sys
+try:
+    p = subprocess.Popen(sys.argv[2:], start_new_session=True)
+except FileNotFoundError:
+    sys.exit(127)
+try:
+    sys.exit(p.wait(timeout=float(sys.argv[1])))
+except subprocess.TimeoutExpired:
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except Exception:
+        p.kill()
+    p.wait()
+    sys.exit(124)
+' "$secs" "$@"
+}
+
+doorbell_token_for_id() { # id's random 8-hex tail, else sha256(id)[:8]
+  local id="$1" tail
+  tail="${id##*-}"
+  if [[ "$tail" =~ ^[0-9a-f]{8}$ ]]; then
+    printf '%s\n' "$tail"
+    return 0
+  fi
+  printf '%s' "$id" | sha256_str | cut -c1-8
+}
+
+# Glanceable id for check/thread/confirmations: timestamp + opaque tail.
+# Never slug/body/path. Durable filenames stay full letter ids.
+display_id() {
+  local id="$1" ts="unknown"
+  if [[ "$id" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}) ]]; then
+    ts="${BASH_REMATCH[1]}"
+  fi
+  printf '%s · %s' "$ts" "$(doorbell_token_for_id "$id")"
+}
+
+# User-facing status/errors: keep display_id; do not re-derive a pasted one.
+safe_id_out() {
+  case "$1" in
+    *" · "*) printf '%s' "$1";;
+    *) display_id "$1";;
+  esac
+}
+
+# Confirmation/error label for a durable letter file. Never basename/slug/path.
+confirm_label() {
+  local f="$1" id
+  id="$(frontmatter_value "$f" id 2>/dev/null || true)"
+  if [[ -z "$id" ]]; then
+    id="${f##*/}"
+    id="${id%.md}"
+  fi
+  display_id "$id"
+}
+
+# A path argument is a file that already exists at argv (glob loops always
+# yield this). An id is looked up under inbox/processed by the resolver.
+message_arg_is_path() { [[ -f "$1" ]]; }
+
+# Shared action-reference resolver. Prints one owned path or dies.
+# scope: own-inbox | owned | nudge (nudge scans every participant)
+# allow_path: 0|1 (file/reply may pass 1; read/progress/nudge pass 0)
+# A full letter id is always an escape hatch; a bare 8-hex token must be
+# unique — ambiguous references list display-ids and take NO action.
+resolve_action_ref() {
+  local arg="$1" scope="$2" allow_path="${3:-0}" parent f id disp tok dir h
+  local -a hits=() dirs=()
+  [[ -n "$arg" ]] || return 1
+  if [[ "$allow_path" == 1 ]] && message_arg_is_path "$arg"; then
+    parent="$(cd "$(dirname "$arg")" && pwd -P)" || return 1
+    printf '%s/%s\n' "$parent" "$(basename "$arg")"
+    return 0
+  fi
+  case "$arg" in
+    /*|./*|../*|*/*) die "use a letter id, display id, or unique token, not a path";;
+  esac
+  case "$scope" in
+    own-inbox) dirs=("$(inbox_path "$ME")");;
+    owned) dirs=("$(inbox_path "$ME")" "$(processed_path "$ME")");;
+    nudge)
+      shopt -s nullglob
+      dirs=("$BOX"/*/inbox "$BOX"/*/processed)
+      shopt -u nullglob
+      ;;
+    *) die "internal: bad resolve scope $scope";;
+  esac
+  shopt -s nullglob
+  for dir in "${dirs[@]}"; do
+    [[ -d "$dir" ]] || continue
+    for f in "$dir"/*.md; do
+      [[ -f "$f" ]] || continue
+      id="$(frontmatter_value "$f" id)"
+      disp="$(display_id "$id")"
+      tok="$(doorbell_token_for_id "$id")"
+      if [[ "$id" == "$arg" || "${f##*/}" == "$arg" || "${f##*/}" == "${arg}.md" || "$disp" == "$arg" ]]; then
+        hits+=("$f")
+      elif [[ "$arg" =~ ^[0-9a-f]{8}$ && "$tok" == "$arg" ]]; then
+        hits+=("$f")
+      fi
+    done
+  done
+  shopt -u nullglob
+  if (( ${#hits[@]} == 0 )); then
+    return 1
+  fi
+  if (( ${#hits[@]} > 1 )); then
+    printf 'letterbox: ambiguous reference %s — no action (matches %s); use the full letter id\n' \
+      "$(safe_id_out "$arg")" "${#hits[@]}" >&2
+    for h in "${hits[@]}"; do
+      printf '  %s\n' "$(display_id "$(frontmatter_value "$h" id)")" >&2
+    done
+    exit 1
+  fi
+  printf '%s\n' "${hits[0]}"
+}
 
 frontmatter_value() {
   awk -v wanted="$2" '
@@ -265,10 +402,23 @@ cmd_init() {
 }
 
 ring_doorbell() {
-  local to="$1" type="$2" slug="$3"
+  local to="$1" type="$2" slug="$3" id="${4:-}" token="" rc=0
   [[ -n "${LETTERBOX_DOORBELL:-}" ]] || return 0
   [[ -x "$LETTERBOX_DOORBELL" ]] || die "doorbell is not executable: $LETTERBOX_DOORBELL"
-  "$LETTERBOX_DOORBELL" "$to" "$type" "$slug"
+  [[ -n "$id" ]] && token="$(doorbell_token_for_id "$id")"
+  # Best-effort: the letter is already durable. Bound the adapter run so an
+  # unresponsive ring path can never hang a sender (bound needs python3).
+  if command -v python3 >/dev/null 2>&1; then
+    bounded_cmd "${LETTERBOX_DOORBELL_TIMEOUT:-5}" "$LETTERBOX_DOORBELL" "$to" "$type" "$slug" "$token" || rc=$?
+  else
+    "$LETTERBOX_DOORBELL" "$to" "$type" "$slug" "$token" || rc=$?
+  fi
+  if (( rc == 124 )); then
+    printf 'letterbox: doorbell no_live_surface adapter_timeout timeout=%ss for %s\n' "${LETTERBOX_DOORBELL_TIMEOUT:-5}" "$to" >&2
+  elif (( rc != 0 )); then
+    printf 'letterbox: doorbell adapter exited %s for %s (letter is durable)\n' "$rc" "$to" >&2
+  fi
+  return 0
 }
 
 publish_message() { # to type slug priority requires_ack re deadline body [thread]
@@ -302,7 +452,7 @@ publish_derived_reply() { # parent type body priority
   parent_from="$(frontmatter_value "$parent" from)"
   thread="$(frontmatter_value "$parent" thread)"
   [[ -n "$thread" ]] || thread="$parent_id"
-  [[ -n "$parent_id" && -n "$parent_from" ]] || die "message has invalid frontmatter: $parent"
+  [[ -n "$parent_id" && -n "$parent_from" ]] || die "message has invalid frontmatter: $(confirm_label "$parent")"
   [[ -d "$(inbox_path "$parent_from")" ]] || die "original sender has no inbox: $parent_from"
   reply_id="${parent_id}--${ME}--${type}"
   reply_file="$(inbox_path "$parent_from")/$(reply_file_for "$parent_id" "$type" "$ME")"
@@ -310,7 +460,7 @@ publish_derived_reply() { # parent type body priority
     existing="$reply_file"
     [[ -f "$existing" ]] || existing="$(processed_path "$parent_from")/$(basename "$reply_file")"
     existing_body="$(message_body "$existing")"
-    [[ "$existing_body" == "$body" ]] || die "reply collision has different body: $(basename "$existing")"
+    [[ "$existing_body" == "$body" ]] || die "reply collision has different body: $(confirm_label "$existing")"
     REPLY_FILE="$existing"
     REPLY_ALREADY=true
     return 0
@@ -327,9 +477,9 @@ publish_derived_reply() { # parent type body priority
     rm -f "$tmp"
     existing="$reply_file"
     [[ -f "$existing" ]] || existing="$(processed_path "$parent_from")/$(basename "$reply_file")"
-    [[ -f "$existing" ]] || die "reply publish failed: $(basename "$reply_file")"
+    [[ -f "$existing" ]] || die "reply publish failed: $(display_id "$reply_id")"
     existing_body="$(message_body "$existing")"
-    [[ "$existing_body" == "$body" ]] || die "reply collision has different body: $(basename "$existing")"
+    [[ "$existing_body" == "$body" ]] || die "reply collision has different body: $(confirm_label "$existing")"
     REPLY_FILE="$existing"
     REPLY_ALREADY=true
     return 0
@@ -418,30 +568,212 @@ cmd_send() {
   [[ -n "$body" ]] || die 'empty message body'
   local final; final="$(publish_message "$to" "$type" "$slug" "$priority" "$requires_ack" "$re" "$deadline" "$body" "$thread")"
   printf 'sent: %s\n' "$final"
-  [[ "$priority" == now ]] && ring_doorbell "$to" "$type" "$slug"
+  [[ "$priority" == now ]] && ring_doorbell "$to" "$type" "$slug" "$(basename "$final" .md)"
   return 0
 }
 
-cmd_check() {
-  local who="${1:-$ME}"; need_agent "$who"
-  local inbox; inbox="$(inbox_path "$who")"
-  [[ -d "$inbox" ]] || die "unknown agent: $who"
-  local file count ack_state
-  count=$(find "$inbox" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
-  printf '%s inbox: %s message(s)\n' "$who" "$count"
-  for file in "$inbox"/*.md; do
-    [[ -e "$file" ]] || break
-    ack_state=""
-    if [[ "$(frontmatter_value "$file" requires_ack)" == "true" ]]; then
-      if [[ -f "$file.ack" ]]; then ack_state=" [ACCEPTED]"; else ack_state=" [UNACKED]"; fi
+# Default stale threshold: 14 days of silence (last activity), not birth age.
+check_stale_secs() {
+  local days="${LETTERBOX_CHECK_STALE_DAYS:-14}"
+  printf '%s\n' $((days * 86400))
+}
+
+file_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || date -u +%s; }
+
+id_ts_epoch() { # compact id timestamp YYYY-MM-DDTHHMMSS → epoch (BSD or GNU date)
+  local ts="$1"
+  date -uj -f '%Y-%m-%dT%H%M%S' "$ts" +%s 2>/dev/null && return 0
+  date -u -d "${ts:0:4}-${ts:5:2}-${ts:8:2} ${ts:11:2}:${ts:13:2}:${ts:15:2} UTC" +%s 2>/dev/null
+}
+
+iso_epoch() { # YYYY-MM-DDTHH:MM:SSZ → epoch (BSD or GNU date)
+  local ts="$1"
+  date -uj -f '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null && return 0
+  date -u -d "$ts" +%s 2>/dev/null
+}
+
+letter_epoch() { # $1=id $2=file-fallback
+  local id="$1" file="${2:-}"
+  if [[ "$id" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}) ]]; then
+    id_ts_epoch "${BASH_REMATCH[1]}" && return 0
+  fi
+  [[ -n "$file" && -f "$file" ]] && { file_mtime "$file"; return 0; }
+  date -u +%s
+}
+
+stamp_epoch() { # $1=stamp $2=key (acked_at|progress_at)
+  local raw
+  raw="$(awk -F': ' -v k="$2" '$0 ~ "^"k":"{print $2; exit}' "$1" 2>/dev/null || true)"
+  [[ -n "$raw" ]] || return 1
+  iso_epoch "$raw"
+}
+
+progress_epoch() { stamp_epoch "$1" progress_at; }
+
+# Last activity: max(letter timestamp, ACK stamp, progress_at). STALE means silence.
+activity_epoch() { # $1=letter file
+  local f="$1" id ep cand
+  id="$(frontmatter_value "$f" id)"
+  ep="$(letter_epoch "$id" "$f")"
+  if [[ -f "$f.ack" ]]; then
+    if cand="$(stamp_epoch "$f.ack" acked_at)"; then
+      (( cand > ep )) && ep="$cand"
     fi
-    printf '\n== %s%s ==\n' "$(basename "$file")" "$ack_state"
-    cat "$file"
+    if cand="$(progress_epoch "$f.ack")"; then
+      (( cand > ep )) && ep="$cand"
+    fi
+  fi
+  printf '%s\n' "$ep"
+}
+
+format_age() { # $1=epoch
+  local now sec
+  now="$(date -u +%s)"
+  sec=$((now - $1))
+  (( sec < 0 )) && sec=0
+  if (( sec < 3600 )); then printf '%sm\n' $((sec / 60))
+  elif (( sec < 86400 )); then printf '%sh\n' $((sec / 3600))
+  else printf '%sd\n' $((sec / 86400))
+  fi
+}
+
+letter_ack_state() { # $1=file
+  if [[ "$(frontmatter_value "$1" requires_ack)" == "true" ]]; then
+    if [[ -f "$1.ack" ]]; then printf '%s' " [ACCEPTED]"
+    else printf '%s' " [UNACKED]"
+    fi
+  fi
+}
+
+print_progress_line() { # $1=letter file
+  local stamp="$1.ack" note age ep
+  [[ -f "$stamp" ]] || return 0
+  note="$(awk '/^progress:/{sub(/^progress:[[:space:]]*/, ""); print; exit}' "$stamp" 2>/dev/null || true)"
+  [[ -n "$note" ]] || return 0
+  if ep="$(progress_epoch "$stamp")"; then
+    age="$(format_age "$ep")"
+    printf '    progress: %s  (age %s)\n' "$note" "$age"
+  else
+    printf '    progress: %s\n' "$note"
+  fi
+}
+
+print_letter_card() { # $1=file $2=stale 0|1 $3=age — never prints the body
+  local f="$1" stale="$2" age="$3" extra=""
+  extra="$(letter_ack_state "$f")"
+  if [[ "$stale" == 1 ]]; then
+    extra="${extra}  STALE ${age}"
+  fi
+  echo
+  echo "═══ $(display_id "$(frontmatter_value "$f" id)")${extra}"
+  printf '    from: %s  type: %s\n' "$(frontmatter_value "$f" from)" "$(frontmatter_value "$f" type)"
+  print_progress_line "$f"
+}
+
+cmd_check() {
+  local who="" recent=false thread=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --recent) recent=true;;
+      --all) ;;
+      --thread)
+        thread="${2:?usage: letterbox check --thread <id>}"
+        shift
+        ;;
+      --*) die "unknown option: $1 (usage: letterbox check [agent] [--recent|--thread <id>])";;
+      *)
+        [[ -z "$who" ]] || die "usage: letterbox check [agent] [--recent|--thread <id>]"
+        who="$1"
+        ;;
+    esac
+    shift
   done
-  for file in "$inbox"/*.md.ack; do
-    [[ -e "$file" ]] || break
-    [[ -f "${file%.ack}" ]] || printf 'letterbox: warning: orphan ACK sidecar %s\n' "$(basename "$file")" >&2
+  if [[ -n "$thread" ]]; then
+    check_thread "$thread"
+    return 0
+  fi
+  who="${who:-$ME}"
+  [[ -n "$who" ]] || die 'letterbox check <agent> (or set LETTERBOX_AGENT)'
+  need_agent "$who"
+  local dir; dir="$(inbox_path "$who")"
+  [[ -d "$dir" ]] || die "unknown agent: $who"
+  local f n id ep now stale_secs live_n=0 stale_n=0 oid
+  local -a live_rows=() stale_rows=()
+  now="$(date -u +%s)"
+  stale_secs="$(check_stale_secs)"
+  n=0
+  for f in "$dir"/*.md; do
+    [[ -e "$f" ]] || break
+    n=$((n + 1))
+    ep="$(activity_epoch "$f")"
+    if (( now - ep > stale_secs )); then
+      stale_n=$((stale_n + 1))
+      stale_rows+=("$ep|$f|$(format_age "$ep")")
+    else
+      live_n=$((live_n + 1))
+      live_rows+=("$ep|$f|$(format_age "$ep")")
+    fi
   done
+  local days="${LETTERBOX_CHECK_STALE_DAYS:-14}"
+  printf '%s\n' "── $who inbox: $n message(s)  open: $live_n live · $stale_n stale (>${days}d)"
+  if (( live_n > 0 )); then
+    printf '%s\n' "${live_rows[@]}" | sort -t'|' -k1,1nr | while IFS='|' read -r ep f age; do
+      print_letter_card "$f" 0 "$age"
+    done
+  fi
+  if [[ "$recent" == true ]]; then
+    echo
+    echo "$stale_n stale items hidden; run letterbox check to see all open work"
+  elif (( stale_n > 0 )); then
+    printf '%s\n' "${stale_rows[@]}" | sort -t'|' -k1,1nr | while IFS='|' read -r ep f age; do
+      print_letter_card "$f" 1 "$age"
+    done
+  fi
+  for f in "$dir"/*.md.ack; do
+    [[ -e "$f" ]] || break
+    if [[ ! -f "${f%.ack}" ]]; then
+      oid="${f##*/}"
+      oid="${oid%.md.ack}"
+      printf 'letterbox: warning: orphan ACK sidecar %s\n' "$(safe_id_out "$oid")" >&2
+    fi
+  done
+  return 0
+}
+
+check_thread() { # $1=thread-or-re id — read-only fan-out (thread: then re:), never writes
+  local want="$1" f agent folder id tid rid typ state
+  echo "── thread $(display_id "$want")"
+  shopt -s nullglob
+  for folder in inbox processed; do
+    for f in "$BOX"/*/"$folder"/*.md; do
+      [[ -f "$f" ]] || continue
+      id="$(frontmatter_value "$f" id)"
+      tid="$(frontmatter_value "$f" thread)"
+      rid="$(frontmatter_value "$f" re)"
+      [[ "$tid" == "$want" || "$rid" == "$want" || "$id" == "$want" ]] || continue
+      agent="$(basename "$(dirname "$(dirname "$f")")")"
+      typ="$(frontmatter_value "$f" type)"
+      state="silent"
+      if [[ "$folder" == "processed" ]]; then
+        case "$typ" in
+          result) state="result";;
+          nack) state="nack";;
+          *) state="filed";;
+        esac
+      else
+        if [[ -f "$f.ack" ]]; then
+          state="acked"
+        elif [[ "$(frontmatter_value "$f" requires_ack)" == "true" ]]; then
+          state="silent"
+        else
+          state="open"
+        fi
+      fi
+      printf '  %s  %s  %s  %s\n' "$agent" "$folder" "$state" "$(display_id "$id")"
+      print_progress_line "$f"
+    done
+  done
+  shopt -u nullglob
 }
 
 # Resolve id/path to canonical absolute path under own inbox or processed.
@@ -477,10 +809,40 @@ resolve_own_inbox_message() {
   esac
 }
 
-archive_message() {
-  local message="$1"
+cmd_done() {
+  need_me
+  local message="${1:?usage: letterbox done <id-or-file> --reply <delivered-reply-file>}"; shift
+  [[ "${1:-}" == --reply ]] || die 'use letterbox reply for normal replies, or pass --reply <delivered-reply-file>'
+  local reply="${2:?missing reply file}"
+  [[ -f "$reply" ]] || die "reply file not found: $(safe_id_out "$reply")"
+  message="$(resolve_own_inbox_message "$message")"
+  local id from expected_dir actual_dir
+  id="$(frontmatter_value "$message" id)"; from="$(frontmatter_value "$message" from)"
+  [[ -n "$id" && -n "$from" ]] || die 'invalid inbound frontmatter'
+  expected_dir="$(canonical_dir "$(inbox_path "$from")")"
+  actual_dir="$(canonical_dir "$(dirname "$reply")")"
+  [[ "$actual_dir" == "$expected_dir" ]] || die 'reply must be delivered in the sender inbox before archiving'
+  [[ "$(frontmatter_value "$reply" from)" == "$ME" ]] || die 'reply from does not match this agent'
+  [[ "$(frontmatter_value "$reply" to)" == "$from" ]] || die 'reply to does not match original sender'
+  [[ "$(frontmatter_value "$reply" re)" == "$id" ]] || die 'reply re does not match original message'
+  [[ -f "$message.ack" ]] && die 'legacy done cannot close accepted work; use letterbox reply <id> result|nack'
+  local label reply_label
+  label="$(confirm_label "$message")"
+  reply_label="$(confirm_label "$reply")"
   mv "$message" "$BOX/$ME/processed/"
-  printf 'archived: %s\n' "$(basename "$message")"
+  printf 'done: %s → %s/processed/ (reply: %s)\n' "$label" "$ME" "$reply_label"
+}
+
+read_reply_body_or_die() {
+  # Fail-fast: never wait on a TTY and never take a lifecycle lock first.
+  if [[ -t 0 ]]; then
+    die "usage: pipe the reply body via stdin (letterbox reply <id> <ack|nack|result> <slug> [--now])"
+  fi
+  local body
+  if ! IFS= read -r -d '' body < <(cat; printf '\0'); then die 'cannot read reply body'; fi
+  body="$(printf '%s' "$body")"
+  [[ -n "$body" ]] || die 'empty reply body'
+  REPLY_BODY="$body"
 }
 
 cmd_reply() {
@@ -496,8 +858,8 @@ cmd_reply() {
   slug="$(printf '%s' "$slug" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')"
   [[ -n "$slug" ]] || die 'slug became empty'
 
-  local msg parent_id parent_from expected_reply doorbell_to inbox_canon processed_canon
-  msg="$(resolve_owned_message "$message")"
+  local msg parent_id parent_from expected_reply doorbell_to inbox_canon processed_canon req
+  msg="$(resolve_action_ref "$message" owned 1)" || die "message not found: $(safe_id_out "$message")"
   inbox_canon="$(canonical_dir "$(inbox_path "$ME")")"
   processed_canon="$(canonical_dir "$(processed_path "$ME")")"
   case "$msg" in
@@ -507,79 +869,104 @@ cmd_reply() {
       parent_from="$(frontmatter_value "$msg" from)"
       expected_reply="$(inbox_path "$parent_from")/$(reply_file_for "$parent_id" "$type" "$ME")"
       if [[ -f "$expected_reply" || -f "$(processed_path "$parent_from")/$(basename "$expected_reply")" ]]; then
-        printf 'already closed: %s (your %s reply is published)\n' "$(basename "$msg")" "$type"
+        printf 'already closed: %s (your %s reply is published)\n' "$(confirm_label "$msg")" "$type"
         return 0
       fi
-      die "already closed without your $type reply: $(basename "$msg")"
+      die "already closed without your $type reply: $(confirm_label "$msg") — use letterbox check; do not letterbox send $type"
       ;;
     *) die 'can only reply to messages in your own inbox';;
   esac
 
-  [[ "$(frontmatter_value "$msg" requires_ack)" == "true" ]] || die 'letterbox reply requires a task letter (requires_ack: true)'
+  req="$(frontmatter_value "$msg" requires_ack)"
+  case "$req" in
+    true) ;;
+    false)
+      # Low-ceremony close: a non-task letter may one-shot result|nack (no ACK).
+      if [[ "$type" == "ack" ]]; then
+        die "ack is only for requires_ack:true tasks; for this letter use: letterbox reply <id> result <slug>  or  letterbox file <id>"
+      fi
+      ;;
+    *) die "message has invalid requires_ack '$req' (expected true or false)";;
+  esac
   doorbell_to="$(frontmatter_value "$msg" from)"
+  # Body before lock: a hanging stdin must not pin the letter.
+  read_reply_body_or_die
   acquire_lifecycle_lock "$msg"
   trap 'release_lifecycle_lock' EXIT
   if [[ ! -f "$msg" ]]; then
     release_lifecycle_lock
     trap - EXIT
-    printf 'already closed: %s\n' "$(basename "$msg")"
+    printf 'already closed: %s\n' "$(confirm_label "$msg")"
     return 0
   fi
-  local body
-  if ! IFS= read -r -d '' body < <(cat; printf '\0'); then die 'cannot read reply body'; fi
-  body="$(printf '%s' "$body")"
-  [[ -n "$body" ]] || die 'empty reply body'
+  local body="$REPLY_BODY" label reply_label
   publish_derived_reply "$msg" "$type" "$body" "$priority"
   if [[ "$type" == "ack" ]]; then
     create_ack_stamp "$msg" "$REPLY_FILE"
+    label="$(confirm_label "$msg")"
+    reply_label="$(confirm_label "$REPLY_FILE")"
     release_lifecycle_lock
     trap - EXIT
-    [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug"
-    printf 'acked: %s (in progress; reply: %s)\n' "$(basename "$msg")" "$(basename "$REPLY_FILE")"
+    [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
+    printf 'acked: %s (in progress; reply: %s)\n' "$label" "$reply_label"
     return 0
   fi
+  # Capture labels BEFORE the move: a post-move confirm would see a missing
+  # file and fall back to a filename-derived label.
+  label="$(confirm_label "$msg")"
+  reply_label="$(confirm_label "$REPLY_FILE")"
   mv "$msg" "$BOX/$ME/processed/"
   rm -f "$msg.ack"
   release_lifecycle_lock
   trap - EXIT
-  [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug"
-  printf 'closed: %s → %s/processed/ (reply: %s)\n' "$(basename "$msg")" "$ME" "$(basename "$REPLY_FILE")"
+  [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
+  printf 'closed: %s → %s/processed/ (reply: %s)\n' "$label" "$ME" "$reply_label"
 }
 
 cmd_file() {
   need_me
-  local msg_arg="${1:?usage: letterbox file <id-or-file>}" msg inbox_canon processed_canon
-  msg="$(resolve_owned_message "$msg_arg")"
+  local msg_arg="${1:?usage: letterbox file <id|display-id|token|path> [--read]}" assert_read=false
+  shift || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --read) assert_read=true;;
+      *) die "unknown option: $1 (usage: letterbox file <id|display-id|token|path> [--read])";;
+    esac
+    shift
+  done
+  local msg typ label arg_is_path=false inbox_canon processed_canon
+  message_arg_is_path "$msg_arg" && arg_is_path=true
+  if [[ "$arg_is_path" == true ]]; then
+    msg="$(resolve_owned_message "$msg_arg")" || die "message not found: $(safe_id_out "$msg_arg")"
+  else
+    msg="$(resolve_action_ref "$msg_arg" owned 0)" || die "message not found: $(safe_id_out "$msg_arg")"
+  fi
   inbox_canon="$(canonical_dir "$(inbox_path "$ME")")"
   processed_canon="$(canonical_dir "$(processed_path "$ME")")"
   case "$msg" in
     "$inbox_canon"/*) ;;
-    "$processed_canon"/*) printf 'already filed: %s\n' "$(basename "$msg")"; return 0;;
+    "$processed_canon"/*) printf 'already filed: %s\n' "$(confirm_label "$msg")"; return 0;;
     *) die 'can only file messages in your own inbox';;
   esac
-  [[ "$(frontmatter_value "$msg" requires_ack)" == "false" ]] || die 'cannot file a task letter; send terminal nack/result instead'
+  if [[ "$(frontmatter_value "$msg" requires_ack)" != "false" ]]; then
+    die 'cannot file a task letter; use: letterbox reply <id> result|nack <slug>'
+  fi
+  typ="$(frontmatter_value "$msg" type)"
+  case "$typ" in
+    result|nack)
+      # Structural rule C: an inbound terminal reply given as a filesystem path
+      # requires --read (caller assertion, not a receipt). An explicit
+      # id/display-id/token files directly.
+      if [[ "$arg_is_path" == true && "$assert_read" != true ]]; then
+        die "refusing to file unread inbound $typ from a path; re-run: letterbox file <path> --read"
+      fi
+      ;;
+  esac
+  # Capture the label BEFORE the move: a post-move confirm would see a missing
+  # file and fall back to a filename-derived label.
+  label="$(confirm_label "$msg")" # pre-move capture (post-move file is gone)
   mv "$msg" "$BOX/$ME/processed/"
-  printf 'filed: %s → %s/processed/\n' "$(basename "$msg")" "$ME"
-}
-
-cmd_done() {
-  need_me
-  local message="${1:?usage: letterbox done <id-or-file> --reply <delivered-reply-file>}"; shift
-  [[ "${1:-}" == --reply ]] || die 'use letterbox reply for normal replies, or pass --reply <delivered-reply-file>'
-  local reply="${2:?missing reply file}"
-  [[ -f "$reply" ]] || die "reply file not found: $reply"
-  message="$(resolve_own_inbox_message "$message")"
-  local id from expected_dir actual_dir
-  id="$(frontmatter_value "$message" id)"; from="$(frontmatter_value "$message" from)"
-  [[ -n "$id" && -n "$from" ]] || die 'invalid inbound frontmatter'
-  expected_dir="$(canonical_dir "$(inbox_path "$from")")"
-  actual_dir="$(canonical_dir "$(dirname "$reply")")"
-  [[ "$actual_dir" == "$expected_dir" ]] || die "reply must be delivered in $expected_dir before archiving"
-  [[ "$(frontmatter_value "$reply" from)" == "$ME" ]] || die 'reply from does not match this agent'
-  [[ "$(frontmatter_value "$reply" to)" == "$from" ]] || die 'reply to does not match original sender'
-  [[ "$(frontmatter_value "$reply" re)" == "$id" ]] || die 'reply re does not match original message'
-  [[ -f "$message.ack" ]] && die 'legacy done cannot close accepted work; use letterbox reply <id> result|nack'
-  archive_message "$message"
+  printf 'filed: %s → %s/processed/\n' "$label" "$ME"
 }
 
 lock_name() {
@@ -615,11 +1002,111 @@ cmd_status() {
   mkdir -p "$BOX/$ME"
   printf 'state: %s\nsince: %s\nnotes: %s\n' "$state" "$(now)" "$note" > "$BOX/$ME/status.md"
 }
+
+cmd_progress() {
+  need_me
+  local ref="${1:?usage: letterbox progress <id|display-id|token> <one-line note>}"
+  shift
+  local note="$*"
+  [[ -n "$note" ]] || die "usage: letterbox progress <id|display-id|token> <one-line note>"
+  [[ "$note" != *$'\n'* ]] || die "progress note must be one line"
+  local msg stamp tmp lid
+  msg="$(resolve_action_ref "$ref" owned 0)" || die "message not found: $(safe_id_out "$ref")"
+  case "$msg" in
+    "$(inbox_path "$ME")"/*) ;;
+    "$(processed_path "$ME")"/*) die "cannot progress a filed/terminal letter: $(safe_id_out "$ref")";;
+    *) die 'can only progress messages in your own inbox';;
+  esac
+  stamp="$msg.ack"
+  [[ -f "$stamp" ]] || die "progress requires an ACK sidecar; use: letterbox reply <id> ack <slug>"
+  tmp="$(mktemp "$(dirname "$stamp")/.${stamp##*/}.tmp.XXXXXX")" || die "cannot write progress"
+  grep -v -E '^(progress|progress_at):' "$stamp" > "$tmp"
+  printf 'progress: %s\nprogress_at: %s\n' "$note" "$(now)" >> "$tmp"
+  mv "$tmp" "$stamp"
+  lid="$(frontmatter_value "$msg" id)"
+  printf 'progress: %s\n' "$(display_id "$lid")"
+}
+
+cmd_read() {
+  need_me
+  local arg="${1:?usage: letterbox read <id|display-id|token>}" msg
+  msg="$(resolve_action_ref "$arg" own-inbox 0)" || die "message not found in your inbox: $(safe_id_out "$arg")"
+  cat "$msg"
+}
+
+cmd_nudge() {
+  need_me
+  local ref="${1:?usage: letterbox nudge <id|display-id|token>}" path folder to typ id
+  path="$(resolve_action_ref "$ref" nudge 0)" || die "message not found: $(safe_id_out "$ref")"
+  folder="$(basename "$(dirname "$path")")"
+  [[ "$folder" != "processed" ]] || die "cannot nudge a filed/terminal letter: $(safe_id_out "$ref")"
+  id="$(frontmatter_value "$path" id)"
+  to="$(basename "$(dirname "$(dirname "$path")")")"
+  typ="$(frontmatter_value "$path" type)"
+  ring_doorbell "$to" "$typ" "" "$id"
+}
+
+cmd_token() { # glance-dismiss a doorbell token: unhandled / filed / unknown
+  local tok="${1:?usage: letterbox token <8hex>}" f id agent folder m
+  local -a matches=()
+  [[ "$tok" =~ ^[0-9a-f]{8}$ ]] || die "token must be 8 lowercase hex"
+  shopt -s nullglob
+  for folder in inbox processed; do
+    for f in "$BOX"/*/"$folder"/*.md; do
+      [[ -f "$f" ]] || continue
+      id="$(frontmatter_value "$f" id)"
+      [[ "$(doorbell_token_for_id "$id")" == "$tok" ]] || continue
+      agent="$(basename "$(dirname "$(dirname "$f")")")"
+      matches+=("$(display_id "$id")  $folder/$agent")
+    done
+  done
+  shopt -u nullglob
+  if (( ${#matches[@]} == 0 )); then
+    echo "unknown-token — no letter; ignore"
+    return 0
+  fi
+  if (( ${#matches[@]} > 1 )); then
+    echo "ambiguous-token — no dismiss, no ring"
+    for m in "${matches[@]}"; do
+      printf '  %s\n' "$m"
+    done
+    return 1
+  fi
+  for folder in inbox processed; do
+    for f in "$BOX"/*/"$folder"/*.md; do
+      [[ -f "$f" ]] || continue
+      id="$(frontmatter_value "$f" id)"
+      if [[ "$(doorbell_token_for_id "$id")" == "$tok" ]]; then
+        if [[ "$folder" == "inbox" ]]; then
+          echo "unhandled — check"
+        else
+          echo "already filed — dismiss knock"
+        fi
+        return 0
+      fi
+    done
+  done
+  echo "unknown-token — no letter; ignore"
+}
+
 case "${1:-}" in
   --version|-V|version) cmd_version;;
   init) shift; cmd_init "$@";; send) shift; cmd_send "$@";; check) shift; cmd_check "$@";;
   reply) shift; cmd_reply "$@";; file) shift; cmd_file "$@";; done) shift; cmd_done "$@";;
+  progress) shift; cmd_progress "$@";; read) shift; cmd_read "$@";;
+  nudge) shift; cmd_nudge "$@";; token) shift; cmd_token "$@";;
   lock) shift; cmd_lock "$@";; unlock) shift; cmd_unlock "$@";;
   status) shift; cmd_status "$@";; herdr) shift; cmd_herdr "$@";;
-  *) printf 'usage: letterbox {init|send|check|reply|file|done|lock|unlock|status|herdr|--version} ...\n\nherdr: setup | run | register | unregister | status\n' >&2; exit 2;;
+  *) printf '%s\n' \
+    'usage: letterbox {init|send|check|reply|file|done|progress|read|nudge|token|lock|unlock|status|herdr|--version} ...' \
+    '' \
+    'check [agent] [--recent|--thread <id>]   open work, live first, stale last (>14d silence); never prints bodies' \
+    'read <id|display-id|token>              print the exact durable letter (own inbox only)' \
+    'progress <id|display-id|token> <note>   update the .ack sidecar of accepted work; no new letter' \
+    'nudge <id|display-id|token>             re-ring an open letter; creates nothing; terminal refuses' \
+    'token <8hex>                            resolve a doorbell token: unhandled / filed / unknown' \
+    'file <ref|path> [--read]                path-form inbound result/nack requires --read; ids file directly' \
+    'reply <ref> result|nack                 requires_ack:false letters close in one step (no prior ACK)' \
+    '' \
+    'herdr: setup | run | register | unregister | status' >&2; exit 2;;
 esac

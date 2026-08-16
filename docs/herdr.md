@@ -46,6 +46,8 @@ herdr pane send-keys <pane-id> enter
 
 (with `HERDR_SOCKET_PATH` set from the registry row when present)
 
+The doorbell line keeps the v0.2 byte-prefix; v0.3 may append an opaque token (`… — please check · <8hex>`). Ring outcomes are `submitted`, `pasted_not_submitted`, or `no_live_surface` — never that the agent read the letter. The helper bounds the adapter run (`LETTERBOX_DOORBELL_TIMEOUT`, default 5s); the letter is durable regardless.
+
 ## Safety
 
 - Doorbell text is generic; no task body, paths, or secrets.

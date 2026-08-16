@@ -50,7 +50,7 @@ Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 
 ## How a task moves
 
-Public v0.2 is a **correctness** release: acknowledgements no longer file work away.
+Public v0.3 keeps the v0.2 **correctness** lifecycle and adds operational reading verbs plus additive doorbell tokens.
 
 ```text
 send task (requires_ack=true)
@@ -64,6 +64,18 @@ Non-task letters (`info` / `status` / received replies) are filed with no invent
 ```bash
 letterbox file <id>
 ```
+
+v0.3 adds operational verbs for the receiving agent:
+
+```bash
+letterbox check                       # open work, live first, stale last; never prints bodies
+letterbox read <id|display-id|token>  # print the exact durable letter
+letterbox progress <ref> <one-line>   # note progress on accepted work (updates the .ack sidecar)
+letterbox nudge <id|display-id|token> # re-ring an open letter without creating one
+letterbox token <8hex>                # resolve a doorbell token (unhandled / filed / unknown)
+```
+
+Doorbell lines may carry an additive opaque token (`… — please check · <8hex>`); tokenless v0.2 lines remain valid knocks — match by prefix/pattern, never exact equality. A `requires_ack: false` letter may also be closed in one step with `letterbox reply <id> result|nack <slug>`.
 
 See [SPEC.md](SPEC.md) and [docs/lifecycle.md](docs/lifecycle.md).
 
@@ -180,7 +192,7 @@ Only `nack` or final `result` moves the original letter to `processed/`.
 
 ## Using a pre-release checkout
 
-If you installed an earlier checkout from `main`, reinstall from the current branch and use the lifecycle commands above. v0.2 adds an optional `thread` field to ownership replies; existing letters remain valid. Early scripts that send `ack`, `nack`, or `result` directly must use `letterbox reply` instead, and delegates must include `--ack`. All agents in one team should run the same v0.2 helper.
+If you installed an earlier checkout from `main`, reinstall from the current branch and use the lifecycle commands above. v0.3 adds operational verbs (`check --recent|--thread`, `read`, `progress`, `nudge`, `token`), an additive doorbell token suffix, one-shot `result|nack` on `requires_ack: false` letters, and `file <path> --read` for path-form terminal replies. v0.2 added an optional `thread` field to ownership replies; existing letters remain valid. Early scripts that send `ack`, `nack`, or `result` directly must use `letterbox reply` instead, and delegates must include `--ack`. All agents in one team should run the same helper.
 
 ## Test
 
@@ -196,7 +208,7 @@ Requires a running local Herdr server (`herdr status` shows running).
 - [docs/why-letterbox.md](docs/why-letterbox.md) — why durable letters plus generic doorbells beat direct task injection
 - [docs/team-setup.md](docs/team-setup.md) — full Herdr team bootstrap
 - [docs/herdr.md](docs/herdr.md) — adapter details, registry/socket, safety, recovery
-- [SPEC.md](SPEC.md) — normative protocol (v0.2)
+- [SPEC.md](SPEC.md) — normative protocol (v0.3)
 - [SECURITY.md](SECURITY.md) — threat model
 - [ROADMAP.md](ROADMAP.md) — scope and deferred items
 - [CHANGELOG.md](CHANGELOG.md) — user-visible changes

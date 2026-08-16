@@ -9,11 +9,18 @@
 #
 # Submit is opt-in: LETTERBOX_HERDR_SUBMIT=1 sends text + enter into the pane.
 # Uses Herdr 0.7.x CLI: pane send-text / pane send-keys
+#
+# Arguments: recipient message-type slug [doorbell-token]
+# The optional v0.3 token (8 lowercase hex, derived from the letter id by the
+# helper) is appended to the doorbell line after the v0.2 tail — additive, so
+# the v0.2 byte-prefix is preserved. Outcomes are reported as submitted,
+# pasted_not_submitted, or no_live_surface — never that the letter was read.
 set -euo pipefail
 
 to="${1:?recipient}"
 type="${2:?type}"
 slug="${3:?slug}"
+token="${4:-}"
 
 herdr_bin="${HERDR_BIN_PATH:-herdr}"
 command -v "$herdr_bin" >/dev/null 2>&1 || {
@@ -22,6 +29,8 @@ command -v "$herdr_bin" >/dev/null 2>&1 || {
 }
 
 line="📬 letterbox doorbell: unacked $type in ${LETTERBOX_DIR:?set LETTERBOX_DIR}/$to/inbox/ — please check"
+# Additive v0.3 token suffix; the token is opaque (never slug/body/path).
+[[ "$token" =~ ^[0-9a-f]{8}$ ]] && line="$line · $token"
 pane_id=''
 socket=''
 
@@ -83,8 +92,14 @@ run_herdr() {
 }
 
 if [[ "${LETTERBOX_HERDR_SUBMIT:-0}" == 1 ]]; then
-  run_herdr pane send-text "$pane_id" "$line" >/dev/null
-  run_herdr pane send-keys "$pane_id" enter >/dev/null
+  if ! run_herdr pane send-text "$pane_id" "$line" >/dev/null; then
+    printf 'herdr doorbell no_live_surface send_failed for %s\n' "$to"
+    exit 0
+  fi
+  if ! run_herdr pane send-keys "$pane_id" enter >/dev/null; then
+    printf 'herdr doorbell pasted_not_submitted to %s on %s\n' "$to" "$pane_id"
+    exit 0
+  fi
   printf 'herdr doorbell submitted to %s on %s\n' "$to" "$pane_id"
 else
   # Best-effort toast; not a terminal inject

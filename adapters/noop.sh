@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 # No-op doorbell adapter. Durable inbox delivery already succeeded.
-# Arguments: recipient message-type slug
+# Arguments: recipient message-type slug [doorbell-token]
 set -euo pipefail
 printf 'letterbox doorbell deferred: %s (%s: %s)\n' "$1" "$2" "$3"

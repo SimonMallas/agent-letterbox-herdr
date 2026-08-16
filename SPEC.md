@@ -1,4 +1,4 @@
-# Agent Letterbox Protocol v0.2
+# Agent Letterbox Protocol v0.3
 
 ## Principle
 
@@ -87,7 +87,8 @@ unread (inbox, requires_ack=true)
 
 unread / noticed (inbox, requires_ack=false)
    │
-   └─ file          → letter → processed/   (no reply)
+   ├─ file          → letter → processed/   (no reply)
+   └─ reply result|nack → reply published, letter → processed/   (one-shot close, v0.3)
 ```
 
 ### Terminal vs non-terminal
@@ -143,8 +144,9 @@ The doorbell is the last act, never the first. Doorbell success means a wake-up 
 6. Do not archive a task letter after ACK only. ACK means accepted WIP.
 7. Legacy `letterbox done --reply <file>` must refuse to close a letter that already has an `.md.ack` sidecar. Use `letterbox reply <id> result|nack` instead.
 8. `letterbox file` must refuse task letters (`requires_ack: true`).
+9. `letterbox file <path>` on an inbound terminal reply (`result` / `nack`) must require `--read`; references by id, display-id, or unique token file directly.
 
-## CLI verbs (v0.2)
+## CLI verbs (v0.3)
 
 ```bash
 # New task or non-task letter (body on stdin)
@@ -162,6 +164,21 @@ LETTERBOX_AGENT=reviewer letterbox file <id>
 LETTERBOX_AGENT=reviewer letterbox check
 ```
 
+v0.3 operational verbs:
+
+```bash
+letterbox check [agent] [--recent|--thread <id>]   # open work, live first, stale last; never prints bodies
+letterbox read <id|display-id|token>               # print the exact durable letter (own inbox only)
+letterbox progress <ref> <one-line>                # update the .ack sidecar of accepted work; no new letter
+letterbox nudge <id|display-id|token>              # re-ring an open letter; creates nothing; terminal refuses
+letterbox token <8hex>                             # resolve a doorbell token: unhandled / filed / unknown
+letterbox file <path> --read                       # path-form filing of an inbound result/nack asserts it was read
+```
+
+Letter references accept the full id, the display-id `timestamp · token` printed by `check`, or a unique bare 8-hex token. An ambiguous token lists its matches and takes no action; the full id is always an escape hatch.
+
+A `requires_ack: false` letter may be closed in one step with `letterbox reply <id> result|nack <slug>` (no prior ACK); `ack` on a non-task letter is refused. `reply` reads the body from stdin before taking any lifecycle lock — a TTY or empty stdin fails fast with usage.
+
 Prefer `printf … | letterbox …` (or another explicit stdin write) over shell heredocs when the body might contain `$`, backticks, or other expansions. The helper owns YAML frontmatter; put only the body on stdin.
 
 ## Doorbells
@@ -172,11 +189,21 @@ A doorbell is optional. Its only terminal content should be a generic prompt suc
 📬 letterbox doorbell: check your inbox
 ```
 
+The full knock emitted by the adapter has two accepted shapes (v0.3 appends an additive opaque token after the v0.2 tail):
+
+```text
+📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check
+📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check · <8-lowercase-hex>
+```
+
 Rules:
 
-- No task body, paths, secrets, or DONE-WHEN text in the doorbell line.
+- No task body, paths, secrets, or DONE-WHEN text in the doorbell line. The token is opaque — derived from the letter id, never a slug, body, or path.
+- Match a knock by prefix/pattern only and accept both shapes; exact full-line equality is a cutover BLOCK hazard that rejects the other shape mid-rollout.
+- `letterbox token <8hex>` resolves a knock token to `unhandled` / `already filed` / `unknown`.
+- A ring outcome is `submitted`, `pasted_not_submitted`, or `no_live_surface` — it never proves the letter was read or a turn started.
 - `priority: now` may ring a live surface; lower priorities are durable-only by default.
-- At-most-once notification over a durable at-least-once record.
+- At-most-once notification over a durable at-least-once record. The helper bounds the adapter run (`LETTERBOX_DOORBELL_TIMEOUT`, default 5s) so an unresponsive ring path cannot hang a sender; the letter is already durable.
 - Offline, busy, or unregistered agents still receive the letter in `inbox/`.
 
 The Herdr adapter implements this contract for live terminal agents (live pane+socket registry first, optional static pane-id patterns as fallback; local Herdr only). The shared filesystem remains the universal transport.
@@ -185,8 +212,9 @@ The Herdr adapter implements this contract for live terminal agents (live pane+s
 
 - Ownership replies carry an optional additive `thread` field; existing letters remain valid.
 - **ACK is non-terminal**: it marks accepted work in progress.
-- All agents in a team should run the same v0.2 helper version.
-- `.md.ack` sidecars represent accepted work in progress and must not be manually deleted.
+- v0.3 doorbell lines add an optional token suffix; v0.2 tokenless lines remain valid knocks. Match by prefix/pattern only, never exact full-line equality.
+- All agents in a team should run the same helper version.
+- `.md.ack` sidecars represent accepted work in progress and must not be manually deleted. A sidecar may carry `progress:` / `progress_at:` notes from `letterbox progress`.
 
 ## Leases
 
