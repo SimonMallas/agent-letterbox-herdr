@@ -13,7 +13,8 @@ license: MIT
 A Letterbox message is the durable work item. A doorbell is only the fast signal that tells a live agent to check its inbox.
 
 ```text
-📬 letterbox doorbell: check your inbox
+📬 letterbox doorbell: unacked <type> in <letterbox>/<agent>/inbox/ — please check
+📬 letterbox doorbell: unacked <type> in <letterbox>/<agent>/inbox/ — please check · <8-lowercase-hex>
 ```
 
 When this appears in your live terminal, check the inbox now.
