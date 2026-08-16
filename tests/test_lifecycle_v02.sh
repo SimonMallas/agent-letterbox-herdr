@@ -7,6 +7,9 @@ letterbox="$root/bin/letterbox"
 PASS=0
 FAIL=0
 BLOCK_FAILED=0
+EXPECTED_PASS=21
+SUITE_DONE=0
+FOOTER_MARK='lifecycle v0.2: PASS'
 
 # fail marks the current block; pass must not green-wash a failed block.
 fail() {
@@ -46,7 +49,16 @@ cleanup() {
   fi
   return 0
 }
-trap cleanup EXIT
+lifecycle_exit_gate() {
+  local rc=$?
+  cleanup
+  if [[ "$SUITE_DONE" == 1 ]]; then
+    return 0
+  fi
+  echo "lifecycle v0.2: FAIL (early abort or incomplete: pass=${PASS:-0} expected=${EXPECTED_PASS} fail=${FAIL:-0}; missing '${FOOTER_MARK}')" >&2
+  exit 1
+}
+trap lifecycle_exit_gate EXIT
 
 new_box() {
   cleanup
@@ -85,6 +97,12 @@ ack_file="$(find "$box/planner/inbox" -name '*--reviewer--ack.md' -type f -print
 [[ "$(file_sha "$task")" == "$orig_hash" ]] || fail B1-mutated
 grep -Fq "re: $task_id" "$ack_file" || fail B1-re
 pass B1-ack-stamp-wip
+
+# Mutation hook (test-only): fires right after the first completed assertion.
+case "${LETTERBOX_MUTATE_EARLY_ABORT:-}" in
+  exit0) echo "MUTATION: early exit 0 after first v0.2 assertion" >&2; exit 0;;
+  abort) echo "MUTATION: set -e abort after first v0.2 assertion" >&2; false;;
+esac
 
 # B2 terminal result + direct
 begin_block
@@ -353,5 +371,15 @@ if printf 'x\n' | lb planner send reviewer delegate badthread --ack --thread 'ba
 pass A1-thread
 
 echo
-echo "lifecycle v0.2: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+echo "lifecycle v0.2: $PASS passed, $FAIL failed (expected $EXPECTED_PASS passes)"
+if [[ "$FAIL" -ne 0 ]]; then
+  echo "lifecycle v0.2: FAIL (failures=$FAIL)" >&2
+  exit 1
+fi
+if [[ "$PASS" -ne "$EXPECTED_PASS" ]]; then
+  echo "lifecycle v0.2: FAIL (pass count $PASS != expected $EXPECTED_PASS — possible early abort)" >&2
+  exit 1
+fi
+echo "$FOOTER_MARK"
+SUITE_DONE=1
+exit 0

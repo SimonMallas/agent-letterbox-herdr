@@ -10,6 +10,9 @@ letterbox="$root/bin/letterbox"
 PASS=0
 FAIL=0
 BLOCK_FAILED=0
+EXPECTED_PASS=10
+SUITE_DONE=0
+FOOTER_MARK='lifecycle v0.3: PASS'
 
 # fail marks the current block; pass must not green-wash a failed block.
 fail() {
@@ -36,7 +39,16 @@ cleanup() {
   fi
   return 0
 }
-trap cleanup EXIT
+lifecycle_exit_gate() {
+  local rc=$?
+  cleanup
+  if [[ "$SUITE_DONE" == 1 ]]; then
+    return 0
+  fi
+  echo "lifecycle v0.3: FAIL (early abort or incomplete: pass=${PASS:-0} expected=${EXPECTED_PASS} fail=${FAIL:-0}; missing '${FOOTER_MARK}')" >&2
+  exit 1
+}
+trap lifecycle_exit_gate EXIT
 
 new_box() {
   cleanup
@@ -111,6 +123,12 @@ printf 'declined\n' | lb reviewer reply "$req_id" nack small-nack >/dev/null
 [[ -n "$(find "$box/planner/inbox" -name '*--reviewer--nack.md' -print -quit)" ]] || fail V1-nack-published
 pass V1-one-shot-result-nack
 
+# Mutation hook (test-only): fires right after the first completed assertion.
+case "${LETTERBOX_MUTATE_EARLY_ABORT:-}" in
+  exit0) echo "MUTATION: early exit 0 after first v0.3 assertion" >&2; exit 0;;
+  abort) echo "MUTATION: set -e abort after first v0.3 assertion" >&2; false;;
+esac
+
 begin_block
 new_box; send_request
 if printf 'nope\n' | lb reviewer reply "$req_id" ack taking 2>"$box/err"; then
@@ -120,7 +138,7 @@ else
   grep -q 'letterbox file <id>' "$box/err" || fail "V1-ack-next-action: $(cat "$box/err")"
   [[ -f "$req" ]] || fail V1-ack-moved-letter
 fi
-pass V1-ack-refused-on-nontask-names-next-action
+pass V1-ack-refused-for-info-letter-names-next-action
 
 echo "=== V2 lifecycle errors name the next action ==="
 
@@ -345,5 +363,15 @@ else
 fi
 
 echo
-echo "lifecycle v0.3: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+echo "lifecycle v0.3: $PASS passed, $FAIL failed (expected $EXPECTED_PASS passes)"
+if [[ "$FAIL" -ne 0 ]]; then
+  echo "lifecycle v0.3: FAIL (failures=$FAIL)" >&2
+  exit 1
+fi
+if [[ "$PASS" -ne "$EXPECTED_PASS" ]]; then
+  echo "lifecycle v0.3: FAIL (pass count $PASS != expected $EXPECTED_PASS — possible early abort)" >&2
+  exit 1
+fi
+echo "$FOOTER_MARK"
+SUITE_DONE=1
+exit 0
