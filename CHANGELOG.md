@@ -2,6 +2,11 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
+## [0.3.1] — 2026-08-16
+
+- Correct v0.3 release metadata and roadmap wording.
+- Complete public v0.3 release-gate coverage, including worktree-clean vocabulary mutations and early-abort lifecycle checks.
+
 ## [0.3.0] — 2026-08-16
 
 Public v0.3 adds operational reading verbs and additive doorbell tokens while keeping the v0.2 letter format and doorbell byte-prefix.
