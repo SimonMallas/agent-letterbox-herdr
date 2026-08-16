@@ -1,27 +1,47 @@
 # Agent Letterbox for Herdr roadmap
 
-## Shipped in v0.3.0
+## v0.2 scope (local)
 
-Agent Letterbox for Herdr is a filesystem-first coordination layer for live local Herdr coding teams.
+Agent Letterbox for Herdr is a filesystem-first coordination system for live local Herdr terminal-agent teams.
 
-- Durable letters with explicit ACK, RESULT, NACK, and filing lifecycle.
-- One-shot RESULT/NACK for requests that explicitly opt out of ACK.
-- Safe reference handling: full ID, display ID, or unique opaque doorbell token.
-- Operational inbox view: live work first, stale work last, progress age, `--recent`, `read`, and read-only threads.
-- Additive v0.2-compatible doorbell token and safe `nudge` for existing open letters.
-- Herdr pane doorbells remain opt-in: a durable letter can arrive even when submit is disabled.
-- Public privacy, vocabulary, mutation, and early-abort test gates.
+Public v0.2 is a **correctness** release: task vs non-task lifecycle, non-terminal ACK with `.md.ack` sidecars, terminal NACK/RESULT, `file` for non-task disposal, publish-before-close ordering, and doorbell-after-local-state.
 
-## Next
+**Supported:**
 
-- Observe real v0.3 use before adding more helper surface.
-- Consider a full outbox/open-bets view only after an explicit trust-model review.
-- Consider intentional group send only if real team usage justifies it.
-- Improve operator diagnostics without turning Letterbox into a dispatcher or task board.
+- Durable Markdown letters in per-agent inboxes.
+- Task vs non-task handling (`requires_ack`).
+- Non-terminal `ack` (accepted WIP + sidecar); terminal `nack` / `result`.
+- `letterbox file` for non-task letters.
+- Reply-first publication and recipient-owned archival.
+- Atomic message publication, advisory locks, lifecycle locks, and filesystem completion proof.
+- `letterbox herdr setup` / `run` / `register` bootstrap with live pane **and** socket registry.
+- Automatic opt-in Herdr pane input doorbells (`LETTERBOX_HERDR_SUBMIT=1`); notification toast when submit is off.
+- Static pane-id pattern fallback after live registry.
+- Local Herdr only (Herdr 0.7+).
+- User-controlled Herdr layouts: workspaces, tabs, and panes.
 
-## Deferred / out of scope
+**Not supported (deferred / non-goals):**
 
-- Customer messaging apps remain native and independent of Letterbox.
-- Any external messaging or external-knock transport requires a separate, app-neutral charter.
-- Auto-registration, machine read receipts, automatic reassignment, and guaranteed wake claims remain out of scope.
-- Cross-host transport, message signing, and external agent-runtime adapters require separate evidence-led work.
+Carried forward:
+
+- SSH/remote Herdr session packaging.
+- Plugins marketplace distribution as a dependency.
+- cmux/tmux/desktop/webhook adapters in this tree (sibling products).
+- Autonomous desktop-agent turns.
+- Persistent watchers, relay/proxy services, or required background daemons.
+- Multi-machine file transport or networked doorbells.
+
+New explicit deferrals for v0.2:
+
+- Automatic backlog drain tools that bulk-file inboxes.
+- `check --deep` reconciliation of letters that older helpers wrongly archived after ACK.
+- A frontmatter protocol-version field (v0.2 keeps the on-disk format unchanged).
+- Built-in chat bridges.
+- Session `resume-log` as a public CLI surface.
+- A permanent postmaster role or central dispatcher.
+
+## Next milestones
+
+1. Dogfood with multi-agent Herdr layouts.
+2. Soak the published artifact (curl + git install paths, one real ack→result cycle) on a local Herdr server.
+3. Keep lifecycle semantics aligned with cmux/tmux siblings without coupling releases.
