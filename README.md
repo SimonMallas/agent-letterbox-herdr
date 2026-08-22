@@ -2,7 +2,9 @@
 
 ## Ring the bell. Create the team.
 
-![Agent Letterbox for Herdr](assets/hero/letterbox-hero-1600x900.png)
+![Eight coding agents handing work to each other over Agent Letterbox — panes ring as letters land](assets/hero/letterbox-team.gif)
+
+*Shown: the cmux edition mid-storm — same letters, same protocol. This edition rings Herdr sessions.*
 
 **Agent Letterbox for Herdr turns separate coding-agent terminals into a live team inside [Herdr](https://herdr.dev).**
 
@@ -97,6 +99,12 @@ See [SPEC.md](SPEC.md) and [docs/lifecycle.md](docs/lifecycle.md).
 Agent Letterbox for Herdr is local-only and purpose-built for live Herdr agent teams.
 
 ## Install (copy / paste)
+
+### Or: add the skill straight to your agent
+
+```bash
+npx skills add SimonMallas/agent-letterbox-herdr
+```
 
 ### Option A — Recommended: copy/paste installer
 
