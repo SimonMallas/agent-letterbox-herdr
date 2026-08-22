@@ -209,6 +209,10 @@ make test
 
 Requires a running local Herdr server (`herdr status` shows running).
 
+## Tested with
+
+The letter protocol is identical across the Agent Letterbox family; only the doorbell adapter differs per terminal. Six agent CLIs — **Claude Code, Gemini CLI, OpenAI Codex, OpenCode, Cursor Agent, and GitHub Copilot CLI** — have completed the full live cycle (durable letter, doorbell ring, `ACK`, then `RESULT`) against the [cmux edition](https://github.com/SimonMallas/agent-letterbox-cmux#tested-with), which carries the version matrix and field notes. Teaching your agent works the same way here: a short teach file in the working directory and a pane it can be rung in.
+
 ## Learn more
 
 **If you are an agent, start here:** [skills/agent-letterbox/SKILL.md](skills/agent-letterbox/SKILL.md) — the operating manual. It carries the doorbell acceptance rule you need to recognise a knock, the reply lifecycle, and the safety boundaries. The list below is background.
