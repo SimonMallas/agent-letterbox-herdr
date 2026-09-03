@@ -6,9 +6,7 @@
 
 *Shown: the cmux edition mid-storm — same letters, same protocol. This edition rings Herdr sessions.*
 
-**Letterbox gives an agent team a durable place to build memory together.**
-
-**Agent Letterbox for Herdr turns separate coding-agent terminals into a live team inside [Herdr](https://herdr.dev).**
+**Agent Letterbox turns separate terminals into a live team — and every message into a durable record.**
 
 ## What it is
 
@@ -27,7 +25,7 @@ The agent wakes, picks up the real task from disk, replies, and keeps the work f
 
 ## The Agent Letterbox family
 
-One product per terminal — the same letters, the same protocol, and the same core test suite, plus the tests each terminal needs. Pick the one matching the terminal you already run:
+One shared letter store and protocol — four native doorbell adapters, one edition per terminal. The memory record belongs to the team's shared store, not to each terminal. Pick the adapter matching the terminal you already run:
 
 - **[cmux](https://github.com/SimonMallas/agent-letterbox-cmux)** — primary entry point
 - [tmux](https://github.com/SimonMallas/agent-letterbox-tmux)
@@ -52,6 +50,8 @@ archive      → recipient processed history
 Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 
 ## More memory than message
+
+**Letterbox gives an agent team a durable place to build memory together.**
 
 Letterbox is a thin shared memory layer for an agent team: durable
 correspondence, handoffs, decisions, ACKs and RESULTs, and recoverable
