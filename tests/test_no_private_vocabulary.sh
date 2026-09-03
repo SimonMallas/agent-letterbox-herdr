@@ -39,6 +39,11 @@ if (( ${#files[@]} == 0 )); then
   exit 1
 fi
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "FAIL: python3 required for whitespace-normalised scan" >&2
+  exit 1
+fi
+
 fails=0
 echo "private-vocabulary sweep: scanning ${#files[@]} tracked file(s)..."
 for f in "${files[@]}"; do
@@ -54,11 +59,20 @@ for f in "${files[@]}"; do
     done < <(grep -nFHI -- "$pat" "$f" 2>/dev/null || true)
   done
   if [[ "$f" != "tests/vocab_normalized.py" ]]; then
-    while IFS= read -r hit; do
-      [[ -z "$hit" ]] && continue
-      echo "FAIL: private vocabulary (whitespace-normalised) at $hit" >&2
+    set +e
+    hits="$(python3 tests/vocab_normalized.py "$f" "shared"" brain" "bus ""doorbell" 2>&1)"
+    nrc=$?
+    set -e
+    if [[ "$nrc" -ne 0 ]]; then
+      echo "FAIL: whitespace-normaliser error on $f (rc=$nrc): $hits" >&2
       fails=$((fails+1))
-    done < <(python3 tests/vocab_normalized.py "$f" "shared"" brain" "bus ""doorbell" 2>/dev/null || true)
+    else
+      while IFS= read -r hit; do
+        [[ -z "$hit" ]] && continue
+        echo "FAIL: private vocabulary (whitespace-normalised) at $hit" >&2
+        fails=$((fails+1))
+      done <<<"$hits"
+    fi
   fi
 done
 
