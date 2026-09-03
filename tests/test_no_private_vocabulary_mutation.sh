@@ -18,9 +18,16 @@ trap 'rm -rf "$tmp"' EXIT
 # Record real-worktree state before doing anything.
 before="$(git -C "$root" status --porcelain)"
 
-# Independent throwaway repo: committed tree only, fresh .git directory.
+# Independent throwaway repo: committed tree, then overlay the working-tree
+# scanner so uncommitted gate/normalizer changes are what mutation exercises.
+# Fresh .git only — never copy a worktree's .git (a pointer file would make
+# git commands in the copy mutate the REAL index).
 mkdir -p "$tmp/repo"
 git -C "$root" archive HEAD | tar -x -C "$tmp/repo"
+cp "$root/tests/$gate_name" "$tmp/repo/tests/$gate_name"
+if [[ -f "$root/tests/vocab_normalized.py" ]]; then
+  cp "$root/tests/vocab_normalized.py" "$tmp/repo/tests/vocab_normalized.py"
+fi
 git -C "$tmp/repo" init -q
 git -C "$tmp/repo" add -A
 git -C "$tmp/repo" -c user.name="mutation-harness" -c user.email="mutation-harness@local" \
@@ -73,6 +80,25 @@ for rel in "docs/visible-residue.md" ".github/workflows/residue-ci.yml" ".hidden
     echo "PASS: gate failed on residue at $rel"
   fi
 done
+
+# Wrapped forbidden phrase must fail.
+mkdir -p "$tmp/repo/docs"
+printf 'residue shared''\n''brain here\n' > "$tmp/repo/docs/wrap-residue.md"
+git -C "$tmp/repo" add -f docs/wrap-residue.md 2>/dev/null || true
+wrap="$(cd "$tmp/repo" && "./tests/$gate_name" 2>&1)" && wrap_rc=0 || wrap_rc=$?
+echo "[mut] --- wrap residue → gate rc=$wrap_rc ---"
+printf '%s\n' "$wrap" | sed 's/^/[mut] | /'
+if [[ "$wrap_rc" -eq 0 ]]; then
+  echo "FAIL: gate passed with wrapped private phrase" >&2
+  fails=$((fails+1))
+elif [[ "$wrap" != *"docs/wrap-residue.md:"* ]]; then
+  echo "FAIL: wrap hit missing file:line" >&2
+  fails=$((fails+1))
+else
+  echo "PASS: gate failed on wrapped phrase"
+fi
+git -C "$tmp/repo" rm -q --cached docs/wrap-residue.md 2>/dev/null || true
+rm -f "$tmp/repo/docs/wrap-residue.md"
 
 # 4. Hits must carry file:line (representative visible-residue case).
 mkdir -p "$tmp/repo/docs"

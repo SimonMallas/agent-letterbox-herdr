@@ -53,6 +53,13 @@ for f in "${files[@]}"; do
       fails=$((fails+1))
     done < <(grep -nFHI -- "$pat" "$f" 2>/dev/null || true)
   done
+  if [[ "$f" != "tests/vocab_normalized.py" ]]; then
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      echo "FAIL: private vocabulary (whitespace-normalised) at $hit" >&2
+      fails=$((fails+1))
+    done < <(python3 tests/vocab_normalized.py "$f" "shared"" brain" "bus ""doorbell" 2>/dev/null || true)
+  fi
 done
 
 if (( fails > 0 )); then
