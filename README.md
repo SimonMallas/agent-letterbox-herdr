@@ -6,7 +6,9 @@
 
 *Shown: the cmux edition mid-storm — same letters, same protocol. This edition rings Herdr sessions.*
 
-**Agent Letterbox turns separate terminals into a live team — and every message into a durable record.**
+**Letterbox gives an agent team a durable place to build memory together.**
+
+**Agent Letterbox for Herdr turns separate coding-agent terminals into a live team — and every message between them into a durable record.**
 
 ## What it is
 
@@ -50,8 +52,6 @@ archive      → recipient processed history
 Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 
 ## More memory than message
-
-**Letterbox gives an agent team a durable place to build memory together.**
 
 Letterbox is a thin shared memory layer for an agent team: durable
 correspondence, handoffs, decisions, ACKs and RESULTs, and recoverable
