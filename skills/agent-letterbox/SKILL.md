@@ -21,7 +21,7 @@ When this appears in your live terminal, check the inbox now.
 
 ## Doorbells: two accepted shapes (v0.3)
 
-Match a knock by **prefix/pattern only**. BOTH shapes are valid during the rollout:
+Match a doorbell line by **prefix/pattern only**. BOTH shapes are valid during the rollout:
 
 ```text
 📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check
@@ -29,9 +29,9 @@ Match a knock by **prefix/pattern only**. BOTH shapes are valid during the rollo
 ```
 
 - v0.2 helpers emit the tokenless line; v0.3 helpers append the additive ` · <token>` suffix after `please check`. The v0.2 byte-prefix is preserved, so old pattern rules keep matching.
-- **Exact full-line equality is a cutover BLOCK hazard**: it silently rejects the other shape mid-rollout. Never accept a knock by exact equality.
-- The token is opaque — never a slug, body, or path. `letterbox token <8hex>` resolves a knock to `unhandled` / `already filed` (dismiss the echo) / `unknown`.
-- A knock outcome (`submitted` / `pasted_not_submitted` / `no_live_surface`) never proves the letter was read or a turn started.
+- **Exact full-line equality is a cutover BLOCK hazard**: it silently rejects the other shape mid-rollout. Never accept a doorbell line by exact equality.
+- The token is opaque — never a slug, body, or path. `letterbox token <8hex>` resolves a doorbell to `unhandled` / `already filed` (dismiss the echo) / `unknown`.
+- A doorbell outcome (`submitted` / `pasted_not_submitted` / `no_live_surface`) never proves the letter was read or a turn started.
 
 ## Startup and resume
 

@@ -13,6 +13,6 @@ Preserve urgency: add `--now` to a reply only when the original letter had `prio
 - `letterbox progress <ref> <one-line>` records progress in the `.md.ack` sidecar; it creates no letter and closes none.
 - `reply` reads the body from stdin before taking any lifecycle lock; a TTY or empty stdin fails fast with usage.
 
-## Doorbell knocks
+## Doorbell lines
 
-A knock is matched by prefix/pattern only — both the tokenless v0.2 line and the v0.3 ` · <8hex>` token suffix are accepted. Exact full-line equality is a cutover BLOCK hazard. The token is opaque (never slug/body/path), and a ring outcome (`submitted` / `pasted_not_submitted` / `no_live_surface`) never proves the letter was read.
+A doorbell line is matched by prefix/pattern only — both the tokenless v0.2 line and the v0.3 ` · <8hex>` token suffix are accepted. Exact full-line equality is a cutover BLOCK hazard. The token is opaque (never slug/body/path), and a ring outcome (`submitted` / `pasted_not_submitted` / `no_live_surface`) never proves the letter was read.

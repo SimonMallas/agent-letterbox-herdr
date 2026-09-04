@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Public-safe v0.3 doorbell fixtures: additive token in the knock line (v0.2
+# Public-safe v0.3 doorbell fixtures: additive token in the doorbell line (v0.2
 # byte-prefix preserved, both shapes accepted), canary-slug negative fixtures,
 # outcome vocabulary (submitted | pasted_not_submitted | no_live_surface —
 # never read/turn_started), nudge re-ring, bounded adapter timeout, and the
@@ -146,7 +146,7 @@ if tail -1 "$ADAPTER_LOG" | awk -F'|' '{print $4}' | grep -q "$CANARY"; then
 fi
 pass D1-token-flows-through-adapter
 
-echo "=== D2 knock line grammar: additive token, v0.2 prefix preserved ==="
+echo "=== D2 doorbell line grammar: additive token, v0.2 prefix preserved ==="
 
 begin_block
 : > "$MOCK_LOG"
@@ -255,7 +255,7 @@ else
   echo "SKIP: D5 bounded timeout (python3 unavailable)"
 fi
 
-echo "=== D6 token verb resolves a knock ==="
+echo "=== D6 token verb resolves a doorbell ==="
 
 begin_block
 TFRESH="2026-08-15T091000-alpha-info-${CANARY}-aaaa0001"

@@ -65,7 +65,7 @@ Public v0.3 adds operational reading verbs and additive doorbell tokens while ke
 
 ### Compatibility
 
-- Additive doorbell change: v0.2 tokenless lines and v0.3 token-bearing lines are both valid knocks. Match by prefix/pattern only; exact full-line equality is a cutover hazard.
+- Additive doorbell change: v0.2 tokenless lines and v0.3 token-bearing lines are both valid doorbells. Match by prefix/pattern only; exact full-line equality is a cutover hazard.
 - All v0.2 lifecycle rules are unchanged: ACK stays non-terminal, `file` refuses task letters, `done` refuses accepted work, ownership replies come from `letterbox reply`.
 - All agents in a team should run the same helper version.
 

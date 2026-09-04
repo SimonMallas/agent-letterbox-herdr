@@ -190,7 +190,7 @@ Letters are durable without a ring; the bell is how anyone is told. Without a be
 📬 letterbox doorbell: unacked <type> in <letterbox>/<agent>/inbox/ — please check · <8-lowercase-hex>
 ```
 
-The full knock emitted by the adapter has two accepted shapes (v0.3 appends an additive opaque token after the v0.2 tail):
+The full doorbell line emitted by the adapter has two accepted shapes (v0.3 appends an additive opaque token after the v0.2 tail):
 
 ```text
 📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check
@@ -200,8 +200,8 @@ The full knock emitted by the adapter has two accepted shapes (v0.3 appends an a
 Rules:
 
 - No task body, paths, secrets, or DONE-WHEN text in the doorbell line. The token is opaque — derived from the letter id, never a slug, body, or path.
-- Match a knock by prefix/pattern only and accept both shapes; exact full-line equality is a cutover BLOCK hazard that rejects the other shape mid-rollout.
-- `letterbox token <8hex>` resolves a knock token to `unhandled` / `already filed` / `unknown`.
+- Match a doorbell line by prefix/pattern only and accept both shapes; exact full-line equality is a cutover BLOCK hazard that rejects the other shape mid-rollout.
+- `letterbox token <8hex>` resolves a doorbell token to `unhandled` / `already filed` / `unknown`.
 - A ring outcome is `submitted`, `pasted_not_submitted`, or `no_live_surface` — it never proves the letter was read or a turn started.
 - `priority: now` may ring a live surface; lower priorities are durable-only by default.
 - At-most-once notification over a durable at-least-once record. The helper bounds the adapter run (`LETTERBOX_DOORBELL_TIMEOUT`, default 5s) so an unresponsive ring path cannot hang a sender; the letter is already durable.
@@ -213,7 +213,7 @@ The Herdr adapter implements this contract for live terminal agents (live pane+s
 
 - Ownership replies carry an optional additive `thread` field; existing letters remain valid.
 - **ACK is non-terminal**: it marks accepted work in progress.
-- v0.3 doorbell lines add an optional token suffix; v0.2 tokenless lines remain valid knocks. Match by prefix/pattern only, never exact full-line equality.
+- v0.3 doorbell lines add an optional token suffix; v0.2 tokenless lines remain valid doorbells. Match by prefix/pattern only, never exact full-line equality.
 - All agents in a team should run the same helper version.
 - `.md.ack` sidecars represent accepted work in progress and must not be manually deleted. A sidecar may carry `progress:` / `progress_at:` notes from `letterbox progress`.
 
