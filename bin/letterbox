@@ -1088,7 +1088,7 @@ cmd_token() { # glance-dismiss a doorbell token: unhandled / filed / unknown
         if [[ "$folder" == "inbox" ]]; then
           echo "unhandled — check"
         else
-          echo "already filed — dismiss knock"
+          echo "already filed — dismiss bell"
         fi
         return 0
       fi
