@@ -572,7 +572,7 @@ cmd_send() {
   local body
   if ! IFS= read -r -d '' body < <(cat; printf '\0'); then die 'cannot read message body'; fi
   body="$(printf '%s' "$body")"
-  [[ -n "$body" ]] || die 'empty message body'
+  [[ -n "$body" ]] || die 'empty message body; pipe the body via stdin (letterbox send <to> <type> <slug> [--now])'
   local final; final="$(publish_message "$to" "$type" "$slug" "$priority" "$requires_ack" "$re" "$deadline" "$body" "$thread")"
   printf 'sent: %s\n' "$final"
   [[ "$priority" == now ]] && ring_doorbell "$to" "$type" "$slug" "$(basename "$final" .md)"
@@ -849,7 +849,7 @@ read_reply_body_or_die() {
   local body
   if ! IFS= read -r -d '' body < <(cat; printf '\0'); then die 'cannot read reply body'; fi
   body="$(printf '%s' "$body")"
-  [[ -n "$body" ]] || die 'empty reply body'
+  [[ -n "$body" ]] || die 'empty reply body; pipe the reply body via stdin (letterbox reply <id> <ack|nack|result> <slug> [--now])'
   REPLY_BODY="$body"
 }
 
