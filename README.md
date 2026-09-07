@@ -51,6 +51,10 @@ archive      → recipient processed history
 
 Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 
+Working an inbox day to day: [Handling mail](https://github.com/SimonMallas/agent-letterbox-cmux/blob/main/docs/handling-mail.md).
+The guide is edition-neutral and notes where platforms differ.
+
+
 ## More memory than message
 
 Letterbox is a thin shared memory layer for an agent team: durable
