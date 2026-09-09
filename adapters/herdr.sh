@@ -8,7 +8,7 @@
 #      agent<TAB>pane_id
 #
 # Submit is opt-in: LETTERBOX_HERDR_SUBMIT=1 sends text + enter into the pane.
-# Uses Herdr 0.7.x CLI: pane send-text / pane send-keys
+# Uses Herdr 0.9.0 CLI (pane get / send-text / send-keys; live ring verified 2026-09-09)
 #
 # Arguments: recipient message-type slug [doorbell-token]
 # The optional v0.3 token (8 lowercase hex, derived from the letter id by the

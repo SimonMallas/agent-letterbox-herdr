@@ -1,6 +1,6 @@
 # Herdr adapter guide
 
-Local-only automatic doorbells for Agent Letterbox using the Herdr CLI (0.7.x).
+Local-only automatic doorbells for Agent Letterbox using the Herdr 0.9.0 CLI (pane get / send-text / send-keys; live ring verified 2026-09-09).
 
 ```text
 letter written to inbox
