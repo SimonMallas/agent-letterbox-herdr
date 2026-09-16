@@ -22,6 +22,7 @@ had a GNU date fallback and are unchanged.
   ACK retry with a fenced body matches the stored letter. A different body
   still collides.
 - `check --thread` skips unterminated letters instead of exiting 1.
+- `message_body` emits raw lines so CRLF bodies survive identical ACK retry.
 
 ### Added
 

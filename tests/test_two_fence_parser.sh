@@ -226,4 +226,34 @@ if grep -q 'from: attacker' <<<"$thout"; then fail "attacker leaked in thread: $
 if grep -q 'unrelated-one-fence' <<<"$thout"; then fail "malformed slug leaked: $thout"; fi
 pass "check --thread stays 0 and lists valid rows despite unrelated malformed"
 
+# CRLF body: store raw bytes; identical ACK retry must match.
+rm -f "$box/beta/inbox"/*.md "$box/alpha/inbox"/*.md
+printf 'Please review this.\n' | lb alpha send beta delegate crlf-retry --ack >/dev/null
+shopt -s nullglob
+cr=("$box/beta/inbox/"*crlf-retry*.md)
+shopt -u nullglob
+[[ ${#cr[@]} -eq 1 ]] || fail "crlf-retry setup count ${#cr[@]}"
+cr_id="$(awk -F': ' '$1 == "id" { print $2; exit }' "${cr[0]}")"
+crlf_body=$'Accepted\r\n---\r\nDetails retained\r\n'
+set +e
+c1="$(printf '%s' "$crlf_body" | lb beta reply "$cr_id" ack crlf-ack 2>&1)"
+c1rc=$?
+set -e
+[[ $c1rc -eq 0 ]] || fail "first CRLF ACK refused: $c1"
+shopt -s nullglob
+cfiles=("$box/alpha/inbox/"*"--ack.md")
+shopt -u nullglob
+[[ ${#cfiles[@]} -eq 1 ]] || fail "CRLF ACK not published (${#cfiles[@]})"
+python3 -c "
+import pathlib, sys
+data = pathlib.Path(sys.argv[1]).read_bytes()
+assert b'Accepted\r\n---\r\nDetails retained' in data, data
+" "${cfiles[0]}" || fail "stored ACK lost CRLF body bytes"
+set +e
+c2="$(printf '%s' "$crlf_body" | lb beta reply "$cr_id" ack crlf-ack 2>&1)"
+c2rc=$?
+set -e
+[[ $c2rc -eq 0 ]] || fail "identical CRLF ACK retry refused: $c2"
+pass "CRLF body identical ACK retry preserves raw bytes"
+
 echo "two-fence parser tests: PASS"
