@@ -2,10 +2,25 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-### Unreleased
+## [0.3.3] — 2026-09-16
 
-- `send` and `reply` refuse an empty body with a usage hint naming how to
-  supply one on stdin.
+Maintenance cut of public main since 0.3.2. Outbox inbound exclusion is
+already on this tree and is not reimplemented. Timestamp helpers already
+had a GNU date fallback and are unchanged.
+
+### Fixed
+
+- `file_mtime` accepts a probe only when the complete captured stdout is a
+  canonical decimal epoch (optional minus; no leading zeros). Nonzero exit
+  discards stdout. GNU `-c` then BSD `-f`.
+- `send` and `reply` refuse an empty or whitespace-only body. Non-blank
+  bodies keep their surrounding whitespace.
+- Frontmatter is trusted only with an opening `---` and its closing `---`.
+  Further `---` lines belong to the body. Unterminated letters are skipped
+  in check/token/read/file/reply with compact ids (no raw path or slug).
+
+### Added
+
 - README links the shared guide.
 
 ## [0.3.2] — 2026-08-16
