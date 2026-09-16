@@ -188,13 +188,17 @@ Letters are durable without a ring; the bell is how anyone is told. Without a be
 ```text
 📬 letterbox doorbell: unacked <type> in <letterbox>/<agent>/inbox/ — please check
 📬 letterbox doorbell: unacked <type> in <letterbox>/<agent>/inbox/ — please check · <8-lowercase-hex>
+📬 letterbox doorbell: unacked <type> from <sender> in <letterbox>/<agent>/inbox/ — please check
+📬 letterbox doorbell: unacked <type> from <sender> in <letterbox>/<agent>/inbox/ — please check · <8-lowercase-hex>
 ```
 
-The full doorbell line emitted by the adapter has two accepted shapes (v0.3 appends an additive opaque token after the v0.2 tail):
+The full doorbell line emitted by the adapter has accepted shapes (v0.3 appends an additive opaque token after the v0.2 tail; v0.4 may insert ` from <sender>` mid-line naming the durable letter's sender, `^[A-Za-z][A-Za-z0-9._-]{0,31}$` — a malformed ` from ` clause rejects the line):
 
 ```text
 📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check
 📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check · <8-lowercase-hex>
+📬 letterbox doorbell: unacked <type> from <sender> in <LETTERBOX_DIR>/<agent>/inbox/ — please check
+📬 letterbox doorbell: unacked <type> from <sender> in <LETTERBOX_DIR>/<agent>/inbox/ — please check · <8-lowercase-hex>
 ```
 
 Rules:

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Herdr doorbell adapter (local automatic live-agent ring).
+# Herdr doorbell adapter — doorbell-outcome v=1 emitter.
+# The letter is already durable; this rings a live pane and reports ONE
+# machine-readable outcome line on stdout (the wrapper owns forwarding).
 #
 # Lookup order:
 #   1) LETTERBOX_HERDR_REGISTRY (default: $LETTERBOX_DIR/herdr-agents.tsv)
@@ -13,35 +15,101 @@
 # Arguments: recipient message-type slug [doorbell-token]
 # The optional v0.3 token (8 lowercase hex, derived from the letter id by the
 # helper) is appended to the doorbell line after the v0.2 tail — additive, so
-# the v0.2 byte-prefix is preserved. Outcomes are reported as submitted,
-# pasted_not_submitted, or no_live_surface — never that the letter was read.
-set -euo pipefail
+# the v0.2 byte-prefix is preserved.
+set -uo pipefail
 
 to="${1:?recipient}"
 type="${2:?type}"
 slug="${3:?slug}"
 token="${4:-}"
 
-herdr_bin="${HERDR_BIN_PATH:-herdr}"
-command -v "$herdr_bin" >/dev/null 2>&1 || {
-  echo 'herdr doorbell deferred: herdr is unavailable' >&2
-  exit 0
+# doorbell-outcome v=1: exactly one line, validated before printing.
+# outcome ∈ {submitted, pasted_not_submitted, no_live_surface}; reason/target
+# cross-checked per the contract (no_live_surface always target=-; submitted
+# and pasted always target=<pinned pane>, reason=- or enter_failed|-).
+emit_outcome() { # $1=outcome $2=reason $3=target
+    local outcome="$1" reason="$2" target="$3"
+    case "$outcome" in
+        submitted)
+            [[ "$reason" == "-" && "$target" != "-" ]] || return 1
+            [[ "$target" =~ ^[A-Za-z0-9._:+-]+$ || "$target" =~ ^%[0-9]+$ ]] || return 1
+            ;;
+        pasted_not_submitted)
+            case "$reason" in enter_failed|-) ;; *) return 1;; esac
+            [[ "$target" != "-" ]] || return 1
+            [[ "$target" =~ ^[A-Za-z0-9._:+-]+$ || "$target" =~ ^%[0-9]+$ ]] || return 1
+            ;;
+        no_live_surface)
+            [[ "$reason" != "-" && "$reason" =~ ^[A-Za-z0-9._:+-]+$ ]] || return 1
+            [[ "$target" == "-" ]] || return 1
+            ;;
+        *) return 1;;
+    esac
+    printf 'doorbell-outcome v=1 outcome=%s reason=%s target=%s\n' \
+        "$outcome" "$reason" "$target"
 }
 
-line="📬 letterbox doorbell: unacked $type in ${LETTERBOX_DIR:?set LETTERBOX_DIR}/$to/inbox/ — please check"
+# Bounded call: 124 = timeout (incl. missing python3), 127 = missing binary,
+# else the child's exit code. Same semantics as the bus helper's bounded_cmd.
+bounded_cmd() { # $1=seconds, rest=argv
+    local secs="$1"; shift
+    command -v python3 >/dev/null 2>&1 || return 124
+    python3 -c '
+import os, signal, subprocess, sys
+try:
+    p = subprocess.Popen(sys.argv[2:], start_new_session=True)
+except FileNotFoundError:
+    sys.exit(127)
+try:
+    sys.exit(p.wait(timeout=float(sys.argv[1])))
+except subprocess.TimeoutExpired:
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except Exception:
+        p.kill()
+    p.wait()
+    sys.exit(124)
+' "$secs" "$@"
+}
+
+herdr_bin="${HERDR_BIN_PATH:-herdr}"
+command -v "$herdr_bin" >/dev/null 2>&1 || { emit_outcome no_live_surface adapter_unavailable -; exit 0; }
+
+# Ruling 5 middle insert: name the durable letter's sender, but only when the
+# wrapper supplied a value that passes the safe-identifier regex (re-checked
+# here — env is never trusted). Otherwise the line stays the old shape.
+line_from="${LETTERBOX_DOORBELL_FROM:-}"
+if [[ "$line_from" =~ ^[A-Za-z][A-Za-z0-9._-]{0,31}$ ]]; then
+  line="📬 letterbox doorbell: unacked $type from $line_from in ${LETTERBOX_DIR:?set LETTERBOX_DIR}/$to/inbox/ — please check"
+else
+  line="📬 letterbox doorbell: unacked $type in ${LETTERBOX_DIR:?set LETTERBOX_DIR}/$to/inbox/ — please check"
+fi
 # Additive v0.3 token suffix; the token is opaque (never slug/body/path).
 [[ "$token" =~ ^[0-9a-f]{8}$ ]] && line="$line · $token"
-pane_id=''
-socket=''
 
+bound_s="${LETTERBOX_DOORBELL_TIMEOUT:-5}"
+
+# 0 = live, 1 = dead, 124 = lookup timeout (retryable, pre-inject).
 pane_live() {
   local p="$1" sock="${2:-}"
   if [[ -n "$sock" ]]; then
-    HERDR_SOCKET_PATH="$sock" "$herdr_bin" pane get "$p" >/dev/null 2>&1
+    bounded_cmd "$bound_s" env HERDR_SOCKET_PATH="$sock" "$herdr_bin" pane get "$p" >/dev/null 2>&1
   else
-    "$herdr_bin" pane get "$p" >/dev/null 2>&1
+    bounded_cmd "$bound_s" "$herdr_bin" pane get "$p" >/dev/null 2>&1
   fi
 }
+
+# Bounded inject/notify on the registered socket (when one was pinned).
+run_herdr() {
+  if [[ -n "$socket" ]]; then
+    bounded_cmd "$bound_s" env HERDR_SOCKET_PATH="$socket" "$herdr_bin" "$@"
+  else
+    bounded_cmd "$bound_s" "$herdr_bin" "$@"
+  fi
+}
+
+pane_id=''
+socket=''
 
 # 1) Live registry
 registry_file="${LETTERBOX_HERDR_REGISTRY:-}"
@@ -51,7 +119,13 @@ fi
 if [[ -n "$registry_file" && -r "$registry_file" ]]; then
   while IFS=$'\t' read -r agent pane sock _ts || [[ -n "${agent:-}" ]]; do
     [[ "$agent" == "$to" && -n "${pane:-}" ]] || continue
-    if pane_live "$pane" "${sock:-}"; then
+    live_ec=0
+    pane_live "$pane" "${sock:-}" || live_ec=$?
+    if [[ "$live_ec" -eq 124 ]]; then
+      emit_outcome no_live_surface helper_timeout -
+      exit 0
+    fi
+    if [[ "$live_ec" -eq 0 ]]; then
       pane_id="$pane"
       socket="${sock:-}"
       break
@@ -69,7 +143,13 @@ if [[ -z "$pane_id" ]]; then
     while IFS=$'\t' read -r agent pane || [[ -n "${agent:-}" ]]; do
       [[ "$agent" == \#* || -z "${agent:-}" ]] && continue
       [[ "$agent" == "$to" && -n "${pane:-}" ]] || continue
-      if pane_live "$pane" ""; then
+      live_ec=0
+      pane_live "$pane" "" || live_ec=$?
+      if [[ "$live_ec" -eq 124 ]]; then
+        emit_outcome no_live_surface helper_timeout -
+        exit 0
+      fi
+      if [[ "$live_ec" -eq 0 ]]; then
         pane_id="$pane"
         socket=''
         break
@@ -78,31 +158,35 @@ if [[ -z "$pane_id" ]]; then
   fi
 fi
 
-if [[ -z "$pane_id" ]]; then
-  echo "herdr doorbell deferred: no live herdr pane for $to" >&2
-  exit 0
-fi
+[[ -n "$pane_id" ]] || { emit_outcome no_live_surface surface_not_found -; exit 0; }
 
-run_herdr() {
-  if [[ -n "$socket" ]]; then
-    HERDR_SOCKET_PATH="$socket" "$herdr_bin" "$@"
-  else
-    "$herdr_bin" "$@"
-  fi
-}
-
+# Input injection is explicit opt-in: Enter can submit unrelated buffer text.
 if [[ "${LETTERBOX_HERDR_SUBMIT:-0}" == 1 ]]; then
-  if ! run_herdr pane send-text "$pane_id" "$line" >/dev/null; then
-    printf 'herdr doorbell no_live_surface send_failed for %s\n' "$to"
+  send_ec=0
+  run_herdr pane send-text "$pane_id" "$line" >/dev/null || send_ec=$?
+  if [[ "$send_ec" -ne 0 ]]; then
+    if [[ "$send_ec" -eq 124 ]]; then
+      # Text step started; bytes may or may not have been injected.
+      emit_outcome no_live_surface unconfirmed -
+    else
+      emit_outcome no_live_surface send_failed -
+    fi
     exit 0
   fi
-  if ! run_herdr pane send-keys "$pane_id" enter >/dev/null; then
-    printf 'herdr doorbell pasted_not_submitted to %s on %s\n' "$to" "$pane_id"
+  enter_ec=0
+  run_herdr pane send-keys "$pane_id" enter >/dev/null || enter_ec=$?
+  if [[ "$enter_ec" -ne 0 ]]; then
+    if [[ "$enter_ec" -eq 124 ]]; then
+      # Enter may have landed after text was confirmed sent.
+      emit_outcome no_live_surface unconfirmed -
+    else
+      emit_outcome pasted_not_submitted enter_failed "$pane_id"
+    fi
     exit 0
   fi
-  printf 'herdr doorbell submitted to %s on %s\n' "$to" "$pane_id"
+  emit_outcome submitted - "$pane_id"
 else
-  # Best-effort toast; not a terminal inject
+  # Best-effort toast; not a terminal inject.
   run_herdr notification show "letterbox doorbell" --body "unacked $type for $to" --sound request >/dev/null 2>&1 || true
-  printf 'herdr notification attempted for %s; set LETTERBOX_HERDR_SUBMIT=1 to inject the doorbell\n' "$to"
+  emit_outcome no_live_surface notify_only -
 fi

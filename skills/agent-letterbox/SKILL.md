@@ -15,6 +15,8 @@ A Letterbox message is the durable work item. A doorbell is only the fast signal
 ```text
 📬 letterbox doorbell: unacked <type> in <letterbox>/<agent>/inbox/ — please check
 📬 letterbox doorbell: unacked <type> in <letterbox>/<agent>/inbox/ — please check · <8-lowercase-hex>
+📬 letterbox doorbell: unacked <type> from <sender> in <letterbox>/<agent>/inbox/ — please check
+📬 letterbox doorbell: unacked <type> from <sender> in <letterbox>/<agent>/inbox/ — please check · <8-lowercase-hex>
 ```
 
 When this appears in your live terminal, check the inbox now.
@@ -26,9 +28,12 @@ Match a doorbell line by **prefix/pattern only**. BOTH shapes are valid during t
 ```text
 📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check
 📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check · <8-lowercase-hex>
+📬 letterbox doorbell: unacked <type> from <sender> in <LETTERBOX_DIR>/<agent>/inbox/ — please check
+📬 letterbox doorbell: unacked <type> from <sender> in <LETTERBOX_DIR>/<agent>/inbox/ — please check · <8-lowercase-hex>
 ```
 
 - v0.2 helpers emit the tokenless line; v0.3 helpers append the additive ` · <token>` suffix after `please check`. The v0.2 byte-prefix is preserved, so old pattern rules keep matching.
+- v0.4 helpers may add a ` from <sender>` middle insert naming the durable letter's sender (`^[A-Za-z][A-Za-z0-9._-]{0,31}$`). A malformed ` from ` clause rejects the line — never re-accept it as the no-sender shape.
 - **Exact full-line equality is a cutover BLOCK hazard**: it silently rejects the other shape mid-rollout. Never accept a doorbell line by exact equality.
 - The token is opaque — never a slug, body, or path. `letterbox token <8hex>` resolves a doorbell to `unhandled` / `already filed` (dismiss the echo) / `unknown`.
 - A doorbell outcome (`submitted` / `pasted_not_submitted` / `no_live_surface`) never proves the letter was read or a turn started.

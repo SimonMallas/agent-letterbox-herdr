@@ -125,7 +125,10 @@ begin_block
 : > "$ADAPTER_LOG"
 sent="$(printf 'body %s\n' "$CANARY" | LETTERBOX_DOORBELL="$box/mock-adapter.sh" ADAPTER_LOG="$ADAPTER_LOG" \
   lb alpha send beta info "$CANARY" --now)"
-sent_id="$(basename "${sent#sent: }" .md)"
+# send stdout is now two lines: the durable path, then the doorbell-outcome
+# contract line from the ring. Parse the durable path off the first.
+sent_path="$(printf '%s\n' "$sent" | sed -n 's/^sent: //p' | head -1)"
+sent_id="$(basename "$sent_path" .md)"
 ring1="$(tail -1 "$ADAPTER_LOG")"
 [[ "${ring1%%|*}" == "beta" ]] || fail "D1-recipient: $ring1"
 tok1="$(printf '%s' "$ring1" | awk -F'|' '{print $4}')"
@@ -200,11 +203,11 @@ out2="$(HERDR_BIN_PATH="$box/herdr-mock" MOCK_LOG="$MOCK_LOG" MOCK_SEND_TEXT_FAI
   LETTERBOX_HERDR_SUBMIT=1 "$adapter" reviewer delegate smoke-test abcd1234)"
 [[ "$out2" == *no_live_surface* && "$out2" == *send_failed* ]] || fail "D3-send-failed: $out2"
 out3="$(HERDR_BIN_PATH="$box/no-such-herdr" LETTERBOX_DIR="$box" "$adapter" reviewer delegate smoke-test abcd1234 2>&1)"
-[[ "$out3" == *'herdr is unavailable'* ]] || fail "D3-unavailable: $out3"
+[[ "$out3" == *'reason=adapter_unavailable'* ]] || fail "D3-unavailable: $out3"
 out4="$(HERDR_BIN_PATH="$box/herdr-mock" MOCK_LOG="$MOCK_LOG" \
   LETTERBOX_DIR="$box" LETTERBOX_HERDR_PATTERNS="$box/empty-patterns.tsv" \
   LETTERBOX_HERDR_SUBMIT=1 "$adapter" gamma delegate smoke-test abcd1234 2>&1)"
-[[ "$out4" == *'no live herdr pane'* ]] || fail "D3-no-pane: $out4"
+[[ "$out4" == *'reason=surface_not_found'* ]] || fail "D3-no-pane: $out4"
 if printf '%s\n%s\n%s\n%s\n' "$out" "$out2" "$out3" "$out4" | grep -Eqw 'read|turn_started'; then
   fail D3-forbidden-vocabulary
 fi
@@ -224,7 +227,7 @@ after="$(find "$box" -name '*.md' | wc -l | tr -d ' ')"
 ring="$(tail -1 "$ADAPTER_LOG")"
 [[ "${ring%%|*}" == "beta" ]] || fail "D4-nudge-recipient: $ring"
 [[ "$(printf '%s' "$ring" | awk -F'|' '{print $4}')" == "bbbb2222" ]] || fail "D4-nudge-token: $ring"
-[[ "$(printf '%s' "$ring" | awk -F'|' '{print $3}')" == "" ]] || fail "D4-nudge-no-slug-arg: $ring"
+[[ "$(printf '%s' "$ring" | awk -F'|' '{print $3}')" == "nudge" ]] || fail "D4-nudge-slug-arg: $ring"
 mv "$box/beta/inbox/${NID}.md" "$box/beta/processed/"
 if LETTERBOX_DOORBELL="$box/mock-adapter.sh" ADAPTER_LOG="$ADAPTER_LOG" lb gamma nudge "$NID" 2>"$box/err"; then
   fail D4-nudge-filed-accepted
@@ -247,9 +250,11 @@ SH
     lb alpha send beta request hang-proof --now 2>&1)"
   end="$(date +%s)"
   [[ "$out" == *sent:* ]] || fail "D5-not-sent: $out"
-  [[ "$out" == *'no_live_surface adapter_timeout'* ]] || fail "D5-timeout-outcome: $out"
+  # The wrapper's backstop is 4*LETTERBOX_DOORBELL_TIMEOUT+5s (the adapter
+  # self-bounds each step at TIMEOUT); a wedged adapter reports unconfirmed.
+  [[ "$out" == *'reason=unconfirmed'* ]] || fail "D5-timeout-outcome: $out"
   [[ -n "$(find "$box/beta/inbox" -name '*hang-proof*.md' -print -quit)" ]] || fail D5-letter-lost
-  (( end - start < 6 )) || fail "D5-not-bounded: $((end - start))s"
+  (( end - start < 12 )) || fail "D5-not-bounded: $((end - start))s"
   pass D5-bounded-timeout
 else
   echo "SKIP: D5 bounded timeout (python3 unavailable)"
@@ -319,7 +324,7 @@ fi
 # M-nudge-creates-letter: a nudge that writes must break D4's no-new-letter assertion.
 begin_block
 mut="$(make_mutant nudge-creates)"
-if mutate_line "$mut" '  ring_doorbell "$to" "$typ" "" "$id"' '  printf '"'"'mut\n'"'"' > "$BOX/$to/inbox/nudge-created.md"; ring_doorbell "$to" "$typ" "" "$id"'; then
+if mutate_line "$mut" '  ring_doorbell "$to" "$typ" nudge "$id"' '  printf '"'"'mut\n'"'"' > "$BOX/$to/inbox/nudge-created.md"; ring_doorbell "$to" "$typ" nudge "$id"'; then
   NID2="2026-08-15T095000-alpha-request-${CANARY}-cccc3333"
   write_letter beta alpha request true "$NID2"
   LETTERBOX_DOORBELL="$box/mock-adapter.sh" ADAPTER_LOG="$ADAPTER_LOG" \
