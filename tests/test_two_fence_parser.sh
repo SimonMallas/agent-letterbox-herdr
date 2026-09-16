@@ -45,7 +45,7 @@ EOF
 out="$(lb beta check 2>"$box/check.err")" || fail "check died on mixed inbox"
 echo "$out" | grep -q 'from: alpha' || fail "valid letter missing from check"
 echo "$out" | grep -q 'MALFORMED' || fail "malformed not flagged: $out"
-echo "$out" | grep -qv 'from: attacker' || fail "attacker from leaked"
+if grep -q 'from: attacker' <<<"$out"; then fail "attacker from leaked: $out"; fi
 grep -q 'MALFORMED' "$box/check.err" || fail "no stderr MALFORMED"
 [[ ! -s "$ringlog" ]] || fail "check rang doorbell"
 [[ -f "$spoof" ]] || fail "check deleted malformed"
@@ -156,8 +156,45 @@ EOF
 out="$(lb beta check)"
 echo "$out" | grep -q 'from: alpha' || fail "real from lost"
 echo "$out" | grep -q 'type: info' || fail "real type lost"
-echo "$out" | grep -qv 'from: trusted' || fail "body from leaked"
-echo "$out" | grep -qv 'MALFORMED' || fail "extra body fence treated as malformed"
+if grep -q 'from: trusted' <<<"$out"; then fail "body from leaked: $out"; fi
+if grep -q 'MALFORMED' <<<"$out"; then fail "extra body fence treated as malformed: $out"; fi
 pass "body may contain further ---; metadata stays the envelope"
+
+# Identical ACK retry must keep body --- ; changed body still collides.
+rm -f "$box/beta/inbox"/*.md "$box/alpha/inbox"/*.md
+printf 'Please review this.\n' | lb alpha send beta delegate fence-retry --ack >/dev/null
+shopt -s nullglob
+freq=("$box/beta/inbox/"*fence-retry*.md)
+shopt -u nullglob
+[[ ${#freq[@]} -eq 1 ]] || fail "fence-retry setup count ${#freq[@]}"
+freq_id="$(awk -F': ' '$1 == "id" { print $2; exit }' "${freq[0]}")"
+fence_body=$'Accepted\n---\nDetails retained\n'
+set +e
+ack1="$(printf '%s' "$fence_body" | lb beta reply "$freq_id" ack same-reply 2>&1)"
+ack1rc=$?
+set -e
+[[ $ack1rc -eq 0 ]] || fail "first fenced ACK refused: $ack1"
+shopt -s nullglob
+ackfiles=("$box/alpha/inbox/"*"--ack.md")
+shopt -u nullglob
+[[ ${#ackfiles[@]} -eq 1 ]] || fail "fenced ACK not published (${#ackfiles[@]})"
+python3 -c "
+import pathlib, sys
+text = pathlib.Path(sys.argv[1]).read_text()
+body = text.split('---\n', 2)[-1]
+assert body == 'Accepted\n---\nDetails retained\n', repr(body)
+" "${ackfiles[0]}" || fail "stored ACK dropped body fence"
+set +e
+ack2="$(printf '%s' "$fence_body" | lb beta reply "$freq_id" ack same-reply 2>&1)"
+ack2rc=$?
+set -e
+[[ $ack2rc -eq 0 ]] || fail "identical fenced ACK retry refused: $ack2"
+set +e
+ack3="$(printf 'other\n' | lb beta reply "$freq_id" ack same-reply 2>&1)"
+ack3rc=$?
+set -e
+[[ $ack3rc -ne 0 ]] || fail "changed-body ACK retry accepted: $ack3"
+echo "$ack3" | grep -q 'reply collision has different body' || fail "changed-body missing collision: $ack3"
+pass "identical ACK retry preserves body ---; changed body refused"
 
 echo "two-fence parser tests: PASS"

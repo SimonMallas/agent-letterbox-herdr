@@ -18,6 +18,9 @@ had a GNU date fallback and are unchanged.
 - Frontmatter is trusted only with an opening `---` and its closing `---`.
   Further `---` lines belong to the body. Unterminated letters are skipped
   in check/token/read/file/reply with compact ids (no raw path or slug).
+- `message_body` keeps `---` lines after the envelope close, so an identical
+  ACK retry with a fenced body matches the stored letter. A different body
+  still collides.
 
 ### Added
 
