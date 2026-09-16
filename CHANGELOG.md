@@ -21,6 +21,7 @@ had a GNU date fallback and are unchanged.
 - `message_body` keeps `---` lines after the envelope close, so an identical
   ACK retry with a fenced body matches the stored letter. A different body
   still collides.
+- `check --thread` skips unterminated letters instead of exiting 1.
 
 ### Added
 

@@ -797,7 +797,7 @@ check_thread() { # $1=thread-or-re id — read-only fan-out (thread: then re:), 
   for folder in inbox processed; do
     for f in "$BOX"/*/"$folder"/*.md; do
       [[ -f "$f" ]] || continue
-      id="$(frontmatter_value "$f" id)"
+      id="$(frontmatter_value "$f" id)" || continue
       tid="$(frontmatter_value "$f" thread)"
       rid="$(frontmatter_value "$f" re)"
       [[ "$tid" == "$want" || "$rid" == "$want" || "$id" == "$want" ]] || continue

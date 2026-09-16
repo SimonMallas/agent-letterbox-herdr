@@ -197,4 +197,33 @@ set -e
 echo "$ack3" | grep -q 'reply collision has different body' || fail "changed-body missing collision: $ack3"
 pass "identical ACK retry preserves body ---; changed body refused"
 
+# Unrelated unterminated letter must not abort check --thread.
+rm -f "$box/beta/inbox"/*.md "$box/alpha/inbox"/*.md
+printf 'Please review this.\n' | lb alpha send beta delegate thread-guard --ack >/dev/null
+shopt -s nullglob
+tg=("$box/beta/inbox/"*thread-guard*.md)
+shopt -u nullglob
+[[ ${#tg[@]} -eq 1 ]] || fail "thread-guard setup count ${#tg[@]}"
+tg_id="$(awk -F': ' '$1 == "id" { print $2; exit }' "${tg[0]}")"
+tg_tok="${tg_id##*-}"
+cat > "$box/beta/inbox/000-unrelated-one-fence.md" <<'EOF'
+---
+id: 2026-09-02T193000-alpha-info-unrelated-one-fence-aabbccdd
+from: attacker
+to: beta
+type: info
+requires_ack: false
+EOF
+set +e
+thout="$(lb beta check --thread "$tg_id" 2>"$box/thread.err")"
+thrc=$?
+set -e
+[[ $thrc -eq 0 ]] || fail "check --thread died on unrelated malformed: rc=$thrc out=$thout err=$(cat "$box/thread.err")"
+echo "$thout" | grep -q '── thread' || fail "missing thread header: $thout"
+echo "$thout" | grep -q "$tg_tok" || fail "valid thread row missing: $thout"
+echo "$thout" | grep -q 'beta' || fail "beta row missing: $thout"
+if grep -q 'from: attacker' <<<"$thout"; then fail "attacker leaked in thread: $thout"; fi
+if grep -q 'unrelated-one-fence' <<<"$thout"; then fail "malformed slug leaked: $thout"; fi
+pass "check --thread stays 0 and lists valid rows despite unrelated malformed"
+
 echo "two-fence parser tests: PASS"
