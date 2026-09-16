@@ -39,5 +39,6 @@ test:
 
 	./tests/test_doorbell_docs_drift.sh
 	./tests/test_doorbell_docs_drift_mutation.sh
+	./tests/test_doorbell_outcome_v1.sh
 
 ci: test
