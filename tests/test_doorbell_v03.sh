@@ -357,7 +357,7 @@ fi
 begin_block
 if command -v python3 >/dev/null 2>&1; then
   mut="$(make_mutant timeout-removed)"
-  if mutate_line "$mut" '    sys.exit(p.wait(timeout=float(sys.argv[1])))' '    sys.exit(p.wait())'; then
+  if mutate_line "$mut" '    rc = p.wait(timeout=float(sys.argv[1]))' '    rc = p.wait()'; then
     ( printf 'body\n' | LETTERBOX_DOORBELL="$box/hang-adapter.sh" LETTERBOX_DOORBELL_TIMEOUT=1 \
       LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$mut" send beta request mut-hang --now >/dev/null 2>&1 ) &
     mut_pid=$!

@@ -27,12 +27,12 @@ if [[ "${1:-}" == "pane" ]]; then
   case "${2:-}" in
     get)
       case "${HERDR_FAKE_GET:-ok}" in
-        ok) exit 0;; fail) exit 1;; sleep) sleep "${HERDR_FAKE_SLEEP:-5}";;
+        ok) exit 0;; fail) exit 1;; sleep) sleep "${HERDR_FAKE_SLEEP:-5}";; exit124) exit 124;;
       esac
       exit 0;;
     send-text)
       case "${HERDR_FAKE_SEND:-ok}" in
-        ok) exit 0;; fail) exit 1;; sleep) sleep "${HERDR_FAKE_SLEEP:-5}";;
+        ok) exit 0;; fail) exit 1;; sleep) sleep "${HERDR_FAKE_SLEEP:-5}";; exit124) exit 124;;
       esac
       exit 0;;
     send-keys)
@@ -69,7 +69,12 @@ cat > "$ROOT/valid-exit1.sh" <<'SH'
 echo 'doorbell-outcome v=1 outcome=submitted reason=- target=pane:7'
 exit 1
 SH
-chmod +x "$ROOT/sleeper.sh" "$ROOT/garbage.sh" "$ROOT/double.sh" "$ROOT/valid-exit1.sh"
+cat > "$ROOT/line-hang.sh" <<'SH'
+#!/usr/bin/env bash
+echo 'doorbell-outcome v=1 outcome=submitted reason=- target=pane:7'
+sleep 30
+SH
+chmod +x "$ROOT/sleeper.sh" "$ROOT/garbage.sh" "$ROOT/double.sh" "$ROOT/valid-exit1.sh" "$ROOT/line-hang.sh"
 
 # PATH farm WITH the fake herdr but WITHOUT python3: a missing runner must be
 # adapter_unavailable (non-retryable), never helper_timeout.
@@ -173,8 +178,17 @@ check "wrapper: garbage child → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/garbage
   'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
 check "wrapper: double line → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/double.sh" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
-check "wrapper: valid line + exit 1 forwards" "LETTERBOX_DOORBELL=$ROOT/valid-exit1.sh" \
-  'doorbell-outcome v=1 outcome=submitted reason=- target=pane:7'
+# Exit-status precedence: a valid line after a NONZERO exit is never forwarded.
+check "wrapper: valid line + nonzero exit → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/valid-exit1.sh" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
+# Runner-owned sentinel: a child exiting 124 on its own is NOT a timeout.
+check "child exit 124 in lookup → surface_not_found (not helper_timeout)" "HERDR_FAKE_GET=exit124" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=surface_not_found target=-'
+check "child exit 124 in send → send_failed (not unconfirmed)" "HERDR_FAKE_SEND=exit124" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=send_failed target=-'
+# A success line followed by a hang: the wrapper backstop kills, line or not.
+check "wrapper: valid line then hang → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/line-hang.sh LETTERBOX_DOORBELL_TIMEOUT=1" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
 
 # Ruling 5 provenance: the from clause names the durable letter's sender,
 # never the calling process identity (ME=tester, letter from relaybot).
@@ -204,4 +218,4 @@ else
 fi
 
 echo "──"
-echo "herdr edition e2e: $pass/20 PASS"
+echo "herdr edition e2e: $pass/23 PASS"
