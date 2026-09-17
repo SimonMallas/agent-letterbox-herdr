@@ -74,7 +74,23 @@ cat > "$ROOT/line-hang.sh" <<'SH'
 echo 'doorbell-outcome v=1 outcome=submitted reason=- target=pane:7'
 sleep 30
 SH
-chmod +x "$ROOT/sleeper.sh" "$ROOT/garbage.sh" "$ROOT/double.sh" "$ROOT/valid-exit1.sh" "$ROOT/line-hang.sh"
+cat > "$ROOT/valid-ht-exit1.sh" <<'SH'
+#!/usr/bin/env bash
+echo 'doorbell-outcome v=1 outcome=no_live_surface reason=helper_timeout target=-'
+exit 1
+SH
+cat > "$ROOT/valid-sf-exit1.sh" <<'SH'
+#!/usr/bin/env bash
+echo 'doorbell-outcome v=1 outcome=no_live_surface reason=send_failed target=-'
+exit 1
+SH
+cat > "$ROOT/valid-pasted-exit1.sh" <<'SH'
+#!/usr/bin/env bash
+echo 'doorbell-outcome v=1 outcome=pasted_not_submitted reason=enter_failed target=pane:7'
+exit 1
+SH
+chmod +x "$ROOT/sleeper.sh" "$ROOT/garbage.sh" "$ROOT/double.sh" "$ROOT/valid-exit1.sh" "$ROOT/line-hang.sh" \
+  "$ROOT/valid-ht-exit1.sh" "$ROOT/valid-sf-exit1.sh" "$ROOT/valid-pasted-exit1.sh"
 
 # PATH farm WITH the fake herdr but WITHOUT python3: a missing runner must be
 # adapter_unavailable (non-retryable), never helper_timeout.
@@ -197,9 +213,16 @@ check "wrapper: garbage child → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/garbage
   'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
 check "wrapper: double line → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/double.sh" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
-# Exit-status precedence: a valid line after a NONZERO exit is never forwarded.
+# Exit-status precedence (ruled rows): submitted/pasted + nonzero → unconfirmed;
+# a valid no_live_surface line keeps its named reason even on nonzero exit.
 check "wrapper: valid line + nonzero exit → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/valid-exit1.sh" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
+check "wrapper: pasted + nonzero exit → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/valid-pasted-exit1.sh" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
+check "wrapper: helper_timeout + nonzero exit still forwards (retryable)" "LETTERBOX_DOORBELL=$ROOT/valid-ht-exit1.sh" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=helper_timeout target=-'
+check "wrapper: send_failed + nonzero exit still forwards (named reason)" "LETTERBOX_DOORBELL=$ROOT/valid-sf-exit1.sh" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=send_failed target=-'
 # Runner-owned sentinel: a child exiting 124 on its own is NOT a timeout.
 check "child exit 124 in lookup → surface_not_found (not helper_timeout)" "HERDR_FAKE_GET=exit124" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=surface_not_found target=-'
@@ -237,4 +260,4 @@ else
 fi
 
 echo "──"
-echo "herdr edition e2e: $pass/24 PASS"
+echo "herdr edition e2e: $pass/27 PASS"
