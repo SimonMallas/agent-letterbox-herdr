@@ -25,5 +25,45 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      - name: Install pinned herdr (v0.9.1, checksum-verified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ runner.os }}" in
+            Linux)
+              asset="herdr-linux-x86_64"
+              want="2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7"
+              ;;
+            macOS)
+              asset="herdr-macos-aarch64"
+              want="5fc7a7e7adfaca56fa80aa89dcb025693357268dab8285b9ce2d08a2313c89de"
+              ;;
+            *)
+              echo "unsupported runner os: ${{ runner.os }}" >&2
+              exit 1
+              ;;
+          esac
+          curl -fsSL -o "${RUNNER_TEMP}/herdr" \
+            "https://github.com/herdrdev/herdr/releases/download/v0.9.1/${asset}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "${want}  ${RUNNER_TEMP}/herdr" | sha256sum -c -
+          else
+            echo "${want}  ${RUNNER_TEMP}/herdr" | shasum -a 256 -c -
+          fi
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            xattr -d com.apple.quarantine "${RUNNER_TEMP}/herdr" 2>/dev/null || true
+          fi
+          mkdir -p "${RUNNER_TEMP}/herdr-bin"
+          install -m 0755 "${RUNNER_TEMP}/herdr" "${RUNNER_TEMP}/herdr-bin/herdr"
+          echo "${RUNNER_TEMP}/herdr-bin" >> "${GITHUB_PATH}"
+          herdr --version
+
       - name: Run test suite
-        run: make ci
+        run: make ci 2>&1 | tee smoke.log
+
+      - name: Native adapter tests must not skip
+        run: |
+          if grep -E 'test: SKIP' smoke.log; then
+            echo "native adapter tests skipped in CI — not allowed" >&2
+            exit 1
+          fi
