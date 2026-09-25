@@ -53,7 +53,7 @@ rings it inside your Herdr sessions.**
 - **Verify it yourself:**
 
   ```bash
-  # from the repository root of a clone (or ~/.local/share/agent-letterbox-cmux after the
+  # from the repository root of a clone (or ~/.local/share/agent-letterbox-herdr after the
   # copy/paste install):
   letterbox --version && make test
   ```
