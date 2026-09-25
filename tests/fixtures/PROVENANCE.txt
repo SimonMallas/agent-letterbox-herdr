@@ -1,0 +1,19 @@
+legacy-v040-long-id.md — provenance
+====================================
+
+Producer repository : public edition repository (agent-letterbox-herdr), tag v0.4.0
+Producer commit     : 84198d990965afe8e3076e8fbdced44ae80e7e5c (Prepare v0.4.0: Release 2 doorbell contract)
+Producer artifact   : bin/letterbox @ 84198d99 (extracted via `git archive`, see GENERATION.log)
+Producer SHA256     : 2cff9f4437519cd1442957a96f62848a91f2ac64b14fdcc6ef5057c3cf0865a2
+
+Fixture file        : tests/fixtures/legacy-v040-long-id.md
+Fixture SHA256      : 762b10aa490f450c86f69b3d584464fdc12ca890fe5c89adc8d2d141b7894465
+Letter id           : 2026-09-24T214051-alpha-request-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-43ac6542
+Letter id byte count: 151 ASCII bytes (17 ts + 1 + 5 alpha + 1 + 7 request + 1 + 110 slug + 1 + 8 hex)
+Generation date     : 2026-09-24
+
+Generation: LETTERBOX_AGENT=alpha, `letterbox send beta request <110x'w'> --ack`
+with body "Synthetic legacy long-id request for compatibility tests." and no
+LETTERBOX_SESSION. The v0.4.0 writer predates the `sent:` field, so the
+frontmatter deliberately has none; query compat treats its time as unknown.
+Exact commands and outputs: GENERATION.log (same directory).

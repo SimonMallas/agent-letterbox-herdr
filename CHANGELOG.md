@@ -2,6 +2,30 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
+## v0.5.0 — unreleased (Herdr edition)
+
+- Add read-only `letterbox query`: strict-v1 envelope cards by default and
+  explicit `--compat-v2` JSON with diagnostics and scoped completeness.
+- Query requires Python 3.9+ (standard library only), with an explicit refusal
+  when unavailable. Existing send/reply/registration and bounded doorbell
+  behavior is unchanged.
+- Writer contract: new send/reply letters carry UTC `sent` from a single clock
+  snapshot; `letterbox send --supersedes <id>` adds the optional annotation
+  with bounded reference validation (repeated flags refused; replies do not
+  inherit). Existing letters are unchanged.
+- Identifier/reference grammar is 1–243 ASCII bytes (255-byte filename budget
+  minus the 12-byte temporary wrapper) across writer and both query modes.
+  New sends bound their normalized slug to leave room for the recipient's
+  longest reply suffix, reporting the actual per-send maximum on refusal.
+  Session and deadline are validated before any lock or publication; inherited
+  reply linkage is validated before publication. Invalid session labels are
+  refused before a reply can create a lifecycle lock.
+- Add synthetic query/writer test suites to `make ci`, with Python 3.9 and 3.13
+  on the Ubuntu and macOS workflow matrix. Matrix configuration is not a claim
+  of a passed run.
+- No archive traversal, archive verb, or send-side validation expansion.
+  See [query contracts and limitations](docs/query.md).
+
 ## [0.4.0] — 2026-09-17
 
 ### Changed

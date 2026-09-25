@@ -48,10 +48,12 @@ DONE-WHEN: Report actionable correctness findings.
 | Field | Required | Notes |
 |---|---|---|
 | `id` | yes | Stable message identity |
+| `sent` | yes for new v0.5.0 letters; optional on older letters | Publication UTC, exactly `YYYY-MM-DDTHH:MM:SSZ` |
 | `from` / `to` | yes | Lowercase agent ids |
 | `type` | yes | See types below |
 | `re` | derived on replies | Parent letter id for ownership replies |
 | `thread` | optional | Conversation root; defaults to parent id on derived replies |
+| `supersedes` | optional | A predecessor letter id supplied by `send --supersedes`; annotation, not authorization or truth |
 | `priority` | yes | `now`, `next`, or `whenever` |
 | `requires_ack` | yes | Decides task vs non-task handling |
 | `deadline` | optional | Operator-visible UTC deadline |
@@ -61,6 +63,48 @@ Types: `request`, `delegate`, `status`, `blocker`, `result`, `ack`, `nack`, `inf
 Publish atomically: write a hidden temporary file in the recipient inbox, then atomically create the final filename. IDs include a random suffix to avoid same-second collisions.
 
 A letter with a missing or empty `requires_ack` is malformed. Helpers must refuse both `reply` and `file` on it.
+
+- `sent` is a local wall-clock publication timestamp, not a transport receipt or
+  a guarantee against clock skew. Query never substitutes filesystem mtime.
+- New `send` and derived replies emit `sent`; existing letters are unchanged.
+  Strict query retains its compact-id UTC fallback for older letters without
+  `sent`; compatibility query reports unknown time for those letters.
+- Every helper-written letter header value is single-line and validated.
+  New ids and copied reply linkage must fit the identifier grammar; an overlong
+  generated/derived id is refused before publication, not truncated. A reply
+  also validates its parent's sender and thread before any lifecycle lock.
+- The id/reference limit is **243 ASCII bytes**, in both writer and query modes:
+  a 255-byte filename budget minus 12 bytes for `.<id>.tmp.XXXXXX`. This is
+  tighter than the three-byte `.md` final-name overhead. Parent ids, derived
+  reply ids and explicit reference fields share this limit, not a 128-byte cap.
+- A new send reserves `--<recipient>--result`, the longest ownership-reply
+  suffix, before accepting its normalized slug. Its maximum slug length is
+  `max(0, 243 - (recipient_length + 10) - (29 + sender_length + type_length))`.
+  The fixed 29 bytes are the 17-byte timestamp, four hyphens and eight random
+  hex characters. A nonempty slug is still required. Over-limit sends fail
+  before writing with `slug too long: max N characters for this sender/recipient/type`,
+  where N is calculated for that send. This budget also leaves room for the
+  parent's ACK/progress temporary sidecar and lifecycle-lock names.
+- Accepted new sends can receive ACK followed by RESULT (or NACK) from their
+  addressed recipient without overflowing that filename budget. This does
+  not promise unbounded nested replies to replies. Long legacy ids remain
+  referenceable/queryable, and replies that fit the v0.4.0 filename budget
+  remain supported. A legacy id whose derived reply plus temporary wrapper
+  already exceeded 255 bytes was not replyable by v0.4.0 either; it remains
+  unreplyable for that reply type. No legacy id is shortened or rewritten.
+- `LETTERBOX_SESSION` must be empty (omit the field) or match
+  `[A-Za-z0-9._:-]{1,64}`. Invalid sessions are refused at send/reply entry,
+  before lock or temporary message creation. The body may still be multiline.
+- `--deadline` may be empty or exactly `YYYY-MM-DDTHH:MM:SSZ`, with a valid
+  Gregorian date, year 0001–9999, hour 00–23 and minute/second 00–59. Offsets,
+  fractional seconds, leap-second 60, CR/LF and impossible dates are refused.
+  The helper validates its generated publication timestamp with the same rule.
+- `letterbox send <to> <type> <slug> --supersedes <id>` adds the optional
+  `supersedes` field. Explicit `--re`, `--thread` and `--supersedes` values must
+  match `[A-Za-z0-9._:-]{1,243}`: 1–243 ASCII characters, no spaces, slashes,
+  control characters, or line breaks. Malformed values are refused before
+  creating any letter or temporary message; never sanitised into another id.
+  Repeated `--supersedes` flags are refused.
 
 ## Task vs non-task
 
@@ -174,6 +218,18 @@ letterbox nudge <id|display-id|token>              # re-ring an open letter; cre
 letterbox token <8hex>                             # resolve a doorbell token: unhandled / filed / unknown
 letterbox file <path> --read                       # path-form filing of an inbound result/nack asserts it was read
 ```
+
+v0.5.0 adds a read-only envelope query verb (strict-v1 default, explicit `--compat-v2`
+for older corpora; Python 3.9+ standard library; archive traversal unsupported):
+
+```bash
+letterbox query                                            # newest envelopes, scope stated
+letterbox query from=planner to=reviewer type=request state=open
+letterbox query thread=thread-id answered=no 'slug~=design'
+letterbox query superseded=head since=2026-01-01T00:00:00Z
+```
+
+See [docs/query.md](docs/query.md) for the query contracts and limitations.
 
 Letter references accept the full id, the display-id `timestamp · token` printed by `check`, or a unique bare 8-hex token. An ambiguous token lists its matches and takes no action; the full id is always an escape hatch.
 

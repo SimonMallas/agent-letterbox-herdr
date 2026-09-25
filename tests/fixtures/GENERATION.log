@@ -1,0 +1,39 @@
+$ mkdir -p /tmp/herdr-v040-writer
+(exit 0)
+$ git -C <agent-letterbox-herdr checkout> archive 84198d990965afe8e3076e8fbdced44ae80e7e5c bin/letterbox | tar -x -C /tmp/herdr-v040-writer/
+(exit 0)
+$ shasum -a 256 /tmp/herdr-v040-writer/bin/letterbox
+2cff9f4437519cd1442957a96f62848a91f2ac64b14fdcc6ef5057c3cf0865a2  /tmp/herdr-v040-writer/bin/letterbox
+(exit 0)
+$ LETTERBOX_DIR=/tmp/herdr-v040-box.qt0Sxn /tmp/herdr-v040-writer/bin/letterbox init alpha beta
+initialized letterbox: /private/tmp/herdr-v040-box.qt0Sxn
+(exit 0)
+slug length: 110
+$ printf 'Synthetic legacy long-id request for compatibility tests.\n' | LETTERBOX_DIR=/tmp/herdr-v040-box.qt0Sxn LETTERBOX_AGENT=alpha /tmp/herdr-v040-writer/bin/letterbox send beta request wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww --ack
+sent: /private/tmp/herdr-v040-box.qt0Sxn/beta/inbox/2026-09-24T214051-alpha-request-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-43ac6542.md
+(exit 0)
+2026-09-24T214051-alpha-request-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-43ac6542.md
+---
+id: 2026-09-24T214051-alpha-request-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-43ac6542
+from: alpha
+to: beta
+type: request
+re: 
+priority: next
+requires_ack: true
+deadline: 
+---
+Synthetic legacy long-id request for compatibility tests.
+
+$ # verification (python3): id is exactly 151 ASCII bytes; frontmatter has no `sent:` field
+id: 2026-09-24T214051-alpha-request-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww-43ac6542
+id ascii bytes: 151
+slug w count: 110
+has sent field: False
+has session field: False
+VERIFIED: 151 bytes, no sent field
+
+$ cp /tmp/herdr-v040-box.qt0Sxn/beta/inbox/2026-09-24T214051-alpha-request-www…w-43ac6542.md tests/fixtures/legacy-v040-long-id.md
+$ shasum -a 256 tests/fixtures/legacy-v040-long-id.md
+762b10aa490f450c86f69b3d584464fdc12ca890fe5c89adc8d2d141b7894465  tests/fixtures/legacy-v040-long-id.md
+(exit 0)
