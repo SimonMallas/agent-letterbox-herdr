@@ -56,7 +56,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/herdr-bin"
           install -m 0755 "${RUNNER_TEMP}/herdr" "${RUNNER_TEMP}/herdr-bin/herdr"
           echo "${RUNNER_TEMP}/herdr-bin" >> "${GITHUB_PATH}"
-          herdr --version
+          "${RUNNER_TEMP}/herdr-bin/herdr" --version
 
       - name: Run test suite
         shell: bash
