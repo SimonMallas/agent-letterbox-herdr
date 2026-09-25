@@ -59,6 +59,7 @@ jobs:
           herdr --version
 
       - name: Run test suite
+        shell: bash
         run: make ci 2>&1 | tee smoke.log
 
       - name: Native adapter tests must not skip
@@ -67,3 +68,7 @@ jobs:
             echo "native adapter tests skipped in CI — not allowed" >&2
             exit 1
           fi
+          grep -qF 'herdr bootstrap suite: PASS' smoke.log || {
+            echo "native bootstrap suite did not prove it ran (no PASS line)" >&2
+            exit 1
+          }
