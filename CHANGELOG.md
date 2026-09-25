@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## v0.5.0 — unreleased (Herdr edition)
+## v0.5.0 — 2026-09-25 (Herdr edition)
 
 - Add read-only `letterbox query`: strict-v1 envelope cards by default and
   explicit `--compat-v2` JSON with diagnostics and scoped completeness.
