@@ -369,8 +369,10 @@ cmd_herdr_unregister() {
   release_lifecycle_lock
   if [[ "$removed" -gt 0 ]]; then
     printf 'unregistered: %s\n' "$agent"
-  else
+  elif [[ -n "$pane" ]]; then
     printf 'kept: %s (no registration on pane %s)\n' "$agent" "$pane"
+  else
+    printf 'no herdr registration for %s\n' "$agent"
   fi
 }
 
@@ -738,8 +740,11 @@ lifecycle_lock_stale() { # $1 = lock dir
   [[ -d "$lock" ]] || return 1
   if [[ -f "$lock/pid" ]]; then
     pid="$(cat "$lock/pid" 2>/dev/null || true)"
-    [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null
-    return
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+      ! kill -0 "$pid" 2>/dev/null
+      return
+    fi
+    # Empty or unreadable pid (holder killed mid-write): judge by age, as for no pid.
   fi
   created="$(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || echo 0)"
   [[ "$created" =~ ^[0-9]+$ ]] || created=0
@@ -752,20 +757,34 @@ lifecycle_lock_stale() { # $1 = lock dir
 # holding it, so a breaker that read an old dead pid can never delete the lock a
 # live process took over meanwhile.
 break_stale_lifecycle_lock() { # $1 = lock dir
-  local lock="$1" gate
-  gate="$BOX/locks/stale-lock-gate"
-  mkdir -p "$BOX/locks" 2>/dev/null || return 1
+  local lock="$1" gate parent
+  # The gate lives beside the lock, at the real path of the lock's directory, so every
+  # writer of this lock shares it: even two Letterbox roots that point
+  # LETTERBOX_HERDR_REGISTRY at one registry file.
+  parent="$(cd "$(dirname "$lock")" 2>/dev/null && pwd -P)" || return 1
+  gate="$parent/.letterbox-stale-lock-gate"
   command -v perl >/dev/null 2>&1 || return 1
-  exec 8>>"$gate" || return 1
-  if ! perl -MFcntl=:flock -e 'open(my $g, ">&=", 8) or exit 1; flock($g, LOCK_EX) or exit 1'; then
-    exec 8>&-
-    return 1
-  fi
-  if lifecycle_lock_stale "$lock"; then
-    rm -f "$lock/pid"
-    rmdir "$lock" 2>/dev/null || true
-  fi
-  exec 8>&-
+  # One perl process holds the gate for the whole check-and-remove, so the kernel
+  # releases it the moment that process ends and no child can inherit it. The wait
+  # for the gate is bounded (~5 s); the caller's own timeout then fails loudly.
+  perl -MFcntl=:flock -e '
+    my ($gate, $lock) = @ARGV;
+    open(my $g, ">>", $gate) or exit 1;
+    my $got = 0;
+    for (1 .. 500) { if (flock($g, LOCK_EX | LOCK_NB)) { $got = 1; last } select(undef, undef, undef, 0.01) }
+    exit 1 unless $got;
+    exit 0 unless -d $lock;
+    my $stale;
+    my $pid = "";
+    if (open(my $p, "<", "$lock/pid")) { $pid = <$p> // ""; chomp $pid; close $p }
+    if ($pid =~ /^[0-9]+$/) {
+      $stale = !kill(0, $pid) && !$!{EPERM};   # EPERM: alive, owned by someone else
+    } else {                                    # no or unreadable pid: judge by age
+      my $mtime = (stat $lock)[9] // time;
+      $stale = (time - $mtime) >= 2;
+    }
+    if ($stale) { unlink "$lock/pid"; rmdir $lock }
+    exit 0' "$gate" "$lock"
 }
 
 acquire_lifecycle_lock() {

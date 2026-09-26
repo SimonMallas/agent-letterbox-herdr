@@ -219,39 +219,37 @@ if printf '%s\n' "$overdue" | grep -q 'legacy-undated'; then
 fi
 printf '%s\n' 'uncertain rows are marked (R3): PASS'
 
-# --- Stale lock: two breakers can never both own the registry lock ---
+# --- Stale lock: nobody clears it without the gate; the gate is shared per lock ---
 box_real="$(cd "$box" && pwd -P)"; reg_real="$box_real/herdr-agents.tsv"; lock="$reg_real.lifecycle.lock"
+gate="$box_real/.letterbox-stale-lock-gate"
+box2="$tmp/box2"; mkdir -p "$box2/locks"
+stale_case() { # $1 = label, $2 = agent, $3 = pane, $4 = LETTERBOX_DIR for the writer
+  sh -c 'exit 0' & local dead=$!; wait "$dead" || true
+  mkdir "$lock"; printf '%s\n' "$dead" > "$lock/pid"
+  rm -f "$tmp/gate-held" "$tmp/gate-release"
+  # Another breaker in the middle of its work: it holds the gate.
+  perl -MFcntl=:flock -e 'open(my $g, ">>", $ARGV[0]) or die; flock($g, LOCK_EX) or die;
+    open(my $m, ">", $ARGV[1]); close $m;
+    for (1 .. 400) { last if -e $ARGV[2]; select(undef, undef, undef, 0.05) }' \
+    "$gate" "$tmp/gate-held" "$tmp/gate-release" &
+  local holder=$!
+  for _ in $(seq 1 100); do [[ -e "$tmp/gate-held" ]] && break; sleep 0.05; done
+  [[ -e "$tmp/gate-held" ]] || fail "$1: could not take the gate"
+  HERDR_ENV=1 HERDR_PANE_ID="$3" HERDR_SOCKET_PATH="$socket" LETTERBOX_DIR="$4" LETTERBOX_HERDR_REGISTRY="$reg_real" \
+    "$letterbox" herdr register "$2" >/dev/null 2>&1 &
+  local writer=$!
+  sleep 1.5
+  [[ "$(cat "$lock/pid" 2>/dev/null)" == "$dead" ]] || fail "$1: the stale lock was cleared while another breaker held the gate"
+  kill -0 "$writer" 2>/dev/null || fail "$1: the writer finished while the gate was held"
+  : > "$tmp/gate-release"; wait "$holder" || true
+  wait "$writer" || fail "$1: the writer failed after the gate was released"
+  grep -q "^$2"$'\t'"$3"$'\t' "$reg" || fail "$1: $2's registration was lost: $(cat "$reg")"
+  [[ ! -e "$lock" ]] || fail "$1: lock left behind"
+  printf '%s\n' "$1: PASS"
+}
 p5="$(h pane split "$first" --direction right --no-focus | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
-sh -c 'exit 0' & dead=$!; wait "$dead" || true
-mkdir "$lock"; printf '%s\n' "$dead" > "$lock/pid"
-rmshim="$tmp/rmshim"; mkdir -p "$rmshim"; real_rm="$(command -v rm)"
-cat > "$rmshim/rm" <<SHIM
-#!/usr/bin/env bash
-# Pause the FIRST removal of the stale lock's pid file (breaker B, inside the gate).
-if [[ "\${@: -1}" == "$lock/pid" && ! -e "$tmp/b-paused" ]]; then
-  : > "$tmp/b-paused"
-  for _ in \$(seq 1 200); do [[ -e "$tmp/b-release" ]] && break; sleep 0.05; done
-fi
-exec "$real_rm" "\$@"
-SHIM
-chmod +x "$rmshim/rm"
-PATH="$rmshim:$PATH" LETTERBOX_DIR="$box" "$letterbox" herdr unregister beta --pane "$first" --socket "$socket" >/dev/null 2>&1 &
-b_pid=$!
-for _ in $(seq 1 100); do [[ -e "$tmp/b-paused" ]] && break; sleep 0.05; done
-[[ -e "$tmp/b-paused" ]] || fail "stale-lock setup: breaker B never reached the pid removal"
-HERDR_ENV=1 HERDR_PANE_ID="$p5" HERDR_SOCKET_PATH="$socket" LETTERBOX_DIR="$box" \
-  "$letterbox" herdr register gamma >/dev/null 2>&1 &
-a_pid=$!
-sleep 1
-[[ "$(cat "$lock/pid" 2>/dev/null)" == "$dead" ]] || fail "stale lock: A took the lock while breaker B was mid-break (pid now $(cat "$lock/pid" 2>/dev/null))"
-kill -0 "$a_pid" 2>/dev/null || fail "stale lock: A finished while B still held the stale lock"
-: > "$tmp/b-release"
-wait "$b_pid" || true
-wait "$a_pid" || true
-grep -q $'^beta\t' "$reg" && fail "stale lock: beta's cleanup was lost: $(cat "$reg")"
-grep -q $'^gamma\t'"$p5"$'\t' "$reg" || fail "stale lock: gamma's registration was lost: $(cat "$reg")"
-grep -q $'^alpha\t'"$p4"$'\t' "$reg" || fail "stale lock: alpha's registration was disturbed: $(cat "$reg")"
-[[ ! -e "$lock" ]] || fail "stale lock: lock left behind"
-printf '%s\n' 'stale lock broken by one breaker at a time: PASS'
+p6="$(h pane split "$first" --direction down --no-focus | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
+stale_case 'stale lock waits for the gate' gamma "$p5" "$box"
+stale_case 'stale lock across two roots sharing one registry' epsilon "$p6" "$box2"
 
 printf '%s\n' 'herdr plugin suite: PASS'
