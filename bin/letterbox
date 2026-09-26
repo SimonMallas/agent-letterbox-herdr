@@ -731,25 +731,49 @@ create_ack_stamp() { # letter ack_file
   rm "$tmp"
 }
 
+# A lock is stale if its recorded holder is dead, or if it has no holder recorded
+# after 2 seconds (the holder died between mkdir and writing its pid).
+lifecycle_lock_stale() { # $1 = lock dir
+  local lock="$1" pid created now_ts
+  [[ -d "$lock" ]] || return 1
+  if [[ -f "$lock/pid" ]]; then
+    pid="$(cat "$lock/pid" 2>/dev/null || true)"
+    [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null
+    return
+  fi
+  created="$(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || echo 0)"
+  [[ "$created" =~ ^[0-9]+$ ]] || created=0
+  now_ts="$(date +%s)"
+  (( now_ts - created >= 2 ))
+}
+
+# Remove a stale lock, one breaker at a time. Breakers queue on a kernel lock
+# (flock, released automatically if the holder dies) and re-check staleness while
+# holding it, so a breaker that read an old dead pid can never delete the lock a
+# live process took over meanwhile.
+break_stale_lifecycle_lock() { # $1 = lock dir
+  local lock="$1" gate
+  gate="$BOX/locks/stale-lock-gate"
+  mkdir -p "$BOX/locks" 2>/dev/null || return 1
+  command -v perl >/dev/null 2>&1 || return 1
+  exec 8>>"$gate" || return 1
+  if ! perl -MFcntl=:flock -e 'open(my $g, ">&=", 8) or exit 1; flock($g, LOCK_EX) or exit 1'; then
+    exec 8>&-
+    return 1
+  fi
+  if lifecycle_lock_stale "$lock"; then
+    rm -f "$lock/pid"
+    rmdir "$lock" 2>/dev/null || true
+  fi
+  exec 8>&-
+}
+
 acquire_lifecycle_lock() {
-  local letter="$1" lock tries=0 pid created now_ts
+  local letter="$1" lock tries=0
   lock="${letter}.lifecycle.lock"
   while ! mkdir "$lock" 2>/dev/null; do
-    if [[ -f "$lock/pid" ]]; then
-      pid="$(cat "$lock/pid" 2>/dev/null || true)"
-      if [[ "$pid" =~ ^[0-9]+$ ]] && ! kill -0 "$pid" 2>/dev/null; then
-        rm -f "$lock/pid"
-        rmdir "$lock" 2>/dev/null || true
-        continue
-      fi
-    else
-      created="$(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || echo 0)"
-      [[ "$created" =~ ^[0-9]+$ ]] || created=0
-      now_ts="$(date +%s)"
-      if (( now_ts - created >= 2 )); then
-        rmdir "$lock" 2>/dev/null || true
-        continue
-      fi
+    if lifecycle_lock_stale "$lock" && break_stale_lifecycle_lock "$lock"; then
+      continue
     fi
     tries=$((tries + 1))
     (( tries < 500 )) || die "timed out waiting for lifecycle lock: $(basename "$letter")"

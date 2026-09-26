@@ -219,4 +219,39 @@ if printf '%s\n' "$overdue" | grep -q 'legacy-undated'; then
 fi
 printf '%s\n' 'uncertain rows are marked (R3): PASS'
 
+# --- Stale lock: two breakers can never both own the registry lock ---
+box_real="$(cd "$box" && pwd -P)"; reg_real="$box_real/herdr-agents.tsv"; lock="$reg_real.lifecycle.lock"
+p5="$(h pane split "$first" --direction right --no-focus | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
+sh -c 'exit 0' & dead=$!; wait "$dead" || true
+mkdir "$lock"; printf '%s\n' "$dead" > "$lock/pid"
+rmshim="$tmp/rmshim"; mkdir -p "$rmshim"; real_rm="$(command -v rm)"
+cat > "$rmshim/rm" <<SHIM
+#!/usr/bin/env bash
+# Pause the FIRST removal of the stale lock's pid file (breaker B, inside the gate).
+if [[ "\${@: -1}" == "$lock/pid" && ! -e "$tmp/b-paused" ]]; then
+  : > "$tmp/b-paused"
+  for _ in \$(seq 1 200); do [[ -e "$tmp/b-release" ]] && break; sleep 0.05; done
+fi
+exec "$real_rm" "\$@"
+SHIM
+chmod +x "$rmshim/rm"
+PATH="$rmshim:$PATH" LETTERBOX_DIR="$box" "$letterbox" herdr unregister beta --pane "$first" --socket "$socket" >/dev/null 2>&1 &
+b_pid=$!
+for _ in $(seq 1 100); do [[ -e "$tmp/b-paused" ]] && break; sleep 0.05; done
+[[ -e "$tmp/b-paused" ]] || fail "stale-lock setup: breaker B never reached the pid removal"
+HERDR_ENV=1 HERDR_PANE_ID="$p5" HERDR_SOCKET_PATH="$socket" LETTERBOX_DIR="$box" \
+  "$letterbox" herdr register gamma >/dev/null 2>&1 &
+a_pid=$!
+sleep 1
+[[ "$(cat "$lock/pid" 2>/dev/null)" == "$dead" ]] || fail "stale lock: A took the lock while breaker B was mid-break (pid now $(cat "$lock/pid" 2>/dev/null))"
+kill -0 "$a_pid" 2>/dev/null || fail "stale lock: A finished while B still held the stale lock"
+: > "$tmp/b-release"
+wait "$b_pid" || true
+wait "$a_pid" || true
+grep -q $'^beta\t' "$reg" && fail "stale lock: beta's cleanup was lost: $(cat "$reg")"
+grep -q $'^gamma\t'"$p5"$'\t' "$reg" || fail "stale lock: gamma's registration was lost: $(cat "$reg")"
+grep -q $'^alpha\t'"$p4"$'\t' "$reg" || fail "stale lock: alpha's registration was disturbed: $(cat "$reg")"
+[[ ! -e "$lock" ]] || fail "stale lock: lock left behind"
+printf '%s\n' 'stale lock broken by one breaker at a time: PASS'
+
 printf '%s\n' 'herdr plugin suite: PASS'

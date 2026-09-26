@@ -204,6 +204,10 @@ distributions include it; check `python3 --version`. See [Queryable envelope
 memory](docs/query.md) for strict-v1 queries, explicit `--compat-v2` output, and
 scope/completeness limits.
 
+Recovering a lock left behind by a crashed process uses `perl` (standard on macOS
+and on Debian/Ubuntu); without it, a stale lock is reported as a timeout instead of
+being cleared.
+
 Agent Letterbox for Herdr is local-only and purpose-built for live Herdr agent teams.
 
 ## Install (copy / paste)

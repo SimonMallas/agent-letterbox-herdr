@@ -8,6 +8,7 @@ All notable changes to Agent Letterbox for Herdr are documented here.
 - Add `tests/test_herdr_plugin.sh`, a live plugin suite on an isolated Herdr session (config and state), run in `make ci` and required by the CI native gate.
 - `letterbox herdr unregister <agent> --pane <id> --socket <path>` removes the registration only if the agent is still on that pane and socket, in one pass, so a late pane-close cannot delete an agent that re-registered elsewhere. Without the flags, behaviour is unchanged.
 - `letterbox herdr register` and `unregister` now hold a lock for their whole registry read-modify-write, so an automatic cleanup and a new registration cannot overwrite each other.
+- Fix a stale-lock race in the lifecycle lock used for letters and the Herdr registry: when a lock holder died, two waiting processes could both clear the stale lock and proceed together. Stale locks are now cleared one breaker at a time through a kernel-released gate (`perl` flock) with a re-check, so a live lock is never removed.
 - Progress notes are printed with control characters removed, so a note cannot inject terminal escape sequences (C0 or UTF-8-encoded C1) into `letterbox check` or the plugin popup.
 
 ## v0.5.0 — 2026-09-25 (Herdr edition)
