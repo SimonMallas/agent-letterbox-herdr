@@ -899,7 +899,7 @@ print_progress_line() { # $1=letter file
   [[ -f "$stamp" ]] || return 0
   note="$(awk '/^progress:/{sub(/^progress:[[:space:]]*/, ""); print; exit}' "$stamp" 2>/dev/null || true)"
   # Notes are untrusted text: never pass terminal control sequences through.
-  note="$(printf '%s' "$note" | LC_ALL=C tr -d '[:cntrl:]')"
+  note="$(printf '%s' "$note" | LC_ALL=C tr -d '[:cntrl:]' | LC_ALL=C sed $'s/\xc2[\x80-\x9f]//g')"
   [[ -n "$note" ]] || return 0
   if ep="$(progress_epoch "$stamp")"; then
     age="$(format_age "$ep")"

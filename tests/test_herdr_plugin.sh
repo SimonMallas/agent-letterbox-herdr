@@ -60,11 +60,17 @@ printf '%s\n' 'plugin link: PASS'
 split="$(h pane split "$first" --direction right --no-focus)"
 p2="$(printf '%s' "$split" | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
 runcmd() { printf "export PATH='%s/bin:'\"\$PATH\" LETTERBOX_DIR='%s' LETTERBOX_HERDR_REGISTRY='%s'; letterbox herdr run %s -- cat" "$root" "$box" "$reg" "$1"; }
-h pane run "$p2" "$(runcmd alpha)" >/dev/null
-h pane run "$first" "$(runcmd beta)" >/dev/null
-for _ in $(seq 1 60); do
-  grep -q $'^alpha\t' "$reg" 2>/dev/null && grep -q $'^beta\t' "$reg" 2>/dev/null && break; sleep 0.15
-done
+# Start agents ONE AT A TIME: Herdr 0.9.1 can interleave the text of two back-to-back
+# `pane run` calls into one pane. Wait for a prompt, run, then wait for the registration.
+start_agent() { # $1 = agent, $2 = pane
+  h pane wait-output "$2" --regex '[%$#>] ?$' --source visible --lines 3 --timeout 15000 >/dev/null 2>&1 || true
+  h pane run "$2" "$(runcmd "$1")" >/dev/null
+  for _ in $(seq 1 100); do grep -q "^$1"$'\t'"$2"$'\t' "$reg" 2>/dev/null && return 0; sleep 0.15; done
+  h pane read "$2" --source recent-unwrapped --lines 20 >&2 || true
+  fail "$1 did not register on $2"
+}
+start_agent alpha "$p2"
+start_agent beta "$first"
 grep -q $'^alpha\t'"$p2"$'\t' "$reg" || fail "alpha not registered on $p2"
 grep -q $'^beta\t'"$first"$'\t' "$reg" || fail "beta not registered on $first"
 
@@ -96,9 +102,11 @@ printf '%s\n' 'plugin view (no box): PASS'
 printf 'Tracked task.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request tracked-task --ack >/dev/null
 id="$(ls "$box/alpha/inbox/" | grep 'tracked-task' | grep -v '\.ack$' | head -1 | sed 's/\.md$//')"
 printf 'On it.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" reply "$id" ack tracked-task-ack >/dev/null
-LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" progress "$id" "$(printf 'half \033]0;pwned\007done\033[31m')" >/dev/null
+LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" progress "$id" "$(printf 'half \033]0;pwned\007done\033[31m \302\235osc\302\234 caf\303\251')" >/dev/null
 chk="$(LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" check 2>&1)"
 printf '%s' "$chk" | grep -q $'\033' && fail "letterbox check passed an escape sequence through"
+printf '%s' "$chk" | LC_ALL=C grep -q $'\xc2[\x80-\x9f]' && fail "letterbox check passed a C1 control through"
+printf '%s' "$chk" | grep -q 'café' || fail "letterbox check mangled legitimate UTF-8: $chk"
 printf '%s' "$chk" | grep -q 'progress: half' || fail "progress note missing from check: $chk"
 printf '%s' "$(view "$p2")" | grep -q $'\033' && fail "popup passed an escape sequence through"
 printf '%s\n' 'progress note control characters stripped: PASS'
@@ -118,9 +126,7 @@ printf '%s\n' 'plugin view (bad overdue hours): PASS'
 
 # --- F1: a stale close event must not delete a live re-registration ---
 p3="$(h pane split "$first" --direction down --no-focus | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
-h pane run "$p3" "$(runcmd alpha)" >/dev/null
-for _ in $(seq 1 60); do grep -q $'^alpha\t'"$p3"$'\t' "$reg" && break; sleep 0.15; done
-grep -q $'^alpha\t'"$p3"$'\t' "$reg" || fail "alpha did not re-register on $p3"
+start_agent alpha "$p3"
 # Reproduce the race exactly: the hook's registry lookup sees the STALE row (alpha on
 # $p2, read before the re-registration), while the registry already holds alpha on $p3.
 race="$tmp/race"; mkdir -p "$race/bin"
