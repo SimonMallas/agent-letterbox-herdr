@@ -339,14 +339,34 @@ cmd_herdr_status() {
 }
 
 cmd_herdr_unregister() {
-  local agent="${1:?usage: letterbox herdr unregister <agent>}" registry tmp
+  local agent="${1:?usage: letterbox herdr unregister <agent> [--pane <id> --socket <path>]}" registry tmp
+  local pane='' socket='' removed
   need_agent "$agent"
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pane) pane="${2:?missing pane id}"; shift 2;;
+      --socket) socket="${2:?missing socket path}"; shift 2;;
+      *) die "unknown herdr unregister option: $1";;
+    esac
+  done
+  [[ -z "$pane" && -z "$socket" || -n "$pane" && -n "$socket" ]] || die 'herdr unregister: --pane and --socket go together'
   registry="$(herdr_registry_path)"
   [[ -f "$registry" ]] || { printf 'no herdr registration for %s\n' "$agent"; return; }
   tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
-  awk -F '\t' -v agent="$agent" '$1 != agent { print }' "$registry" > "$tmp"
+  # Guarded form removes the row only if agent, pane and socket all still match, in
+  # one pass: an agent that re-registered elsewhere meanwhile keeps its new row.
+  awk -F '\t' -v agent="$agent" -v pane="$pane" -v sock="$socket" '
+    $1 == agent && (pane == "" || ($2 == pane && $3 == sock)) { removed++; next }
+    { print }
+    END { print removed + 0 > "/dev/stderr" }' "$registry" > "$tmp" 2> "$tmp.n"
+  removed="$(<"$tmp.n")"; rm -f "$tmp.n"
   mv "$tmp" "$registry"
-  printf 'unregistered: %s\n' "$agent"
+  if [[ "$removed" -gt 0 ]]; then
+    printf 'unregistered: %s\n' "$agent"
+  else
+    printf 'kept: %s (no registration on pane %s)\n' "$agent" "$pane"
+  fi
 }
 
 cmd_herdr_setup() {
@@ -878,6 +898,8 @@ print_progress_line() { # $1=letter file
   local stamp="$1.ack" note age ep
   [[ -f "$stamp" ]] || return 0
   note="$(awk '/^progress:/{sub(/^progress:[[:space:]]*/, ""); print; exit}' "$stamp" 2>/dev/null || true)"
+  # Notes are untrusted text: never pass terminal control sequences through.
+  note="$(printf '%s' "$note" | LC_ALL=C tr -d '[:cntrl:]')"
   [[ -n "$note" ]] || return 0
   if ep="$(progress_epoch "$stamp")"; then
     age="$(format_age "$ep")"

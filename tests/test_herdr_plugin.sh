@@ -92,6 +92,54 @@ printf '%s\n' "$out" | grep -q 'No Letterbox found' || fail "no-box message miss
 [[ ! -e "$root/.letterbox" && ! -e "$root/plugin/.letterbox" ]] || fail "plugin created a .letterbox in its own tree"
 printf '%s\n' 'plugin view (no box): PASS'
 
+# --- F2: untrusted progress notes never pass control sequences through ---
+printf 'Tracked task.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request tracked-task --ack >/dev/null
+id="$(ls "$box/alpha/inbox/" | grep 'tracked-task' | grep -v '\.ack$' | head -1 | sed 's/\.md$//')"
+printf 'On it.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" reply "$id" ack tracked-task-ack >/dev/null
+LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" progress "$id" "$(printf 'half \033]0;pwned\007done\033[31m')" >/dev/null
+chk="$(LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" check 2>&1)"
+printf '%s' "$chk" | grep -q $'\033' && fail "letterbox check passed an escape sequence through"
+printf '%s' "$chk" | grep -q 'progress: half' || fail "progress note missing from check: $chk"
+printf '%s' "$(view "$p2")" | grep -q $'\033' && fail "popup passed an escape sequence through"
+printf '%s\n' 'progress note control characters stripped: PASS'
+
+# --- F4: a busy inbox still fits, with an explicit "+N more" ---
+for i in $(seq 1 25); do printf 'task %s\n' "$i" | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request "bulk-$i" >/dev/null; done
+out="$(view "$p2")"
+[[ "$(printf '%s\n' "$out" | wc -l)" -le 30 ]] || fail "busy popup too tall: $(printf '%s\n' "$out" | wc -l) lines"
+printf '%s\n' "$out" | grep -qE '^  \+[0-9]+ more' || fail "busy popup hides letters without saying so"
+printf '%s\n' 'plugin view (busy inbox capped): PASS'
+
+# --- F5: a bad overdue setting is visible, never a silent all-clear ---
+out="$(printf 'x' | env -u LETTERBOX_DIR LETTERBOX_PLUGIN_OVERDUE_HOURS=abc HERDR_PLUGIN_ROOT="$root" HERDR_SOCKET_PATH="$socket" \
+  HERDR_PLUGIN_CONTEXT_JSON="{\"focused_pane_id\":\"$p2\"}" bash "$root/plugin/view.sh" 2>&1)"
+printf '%s\n' "$out" | grep -q 'is not a positive number; using 24' || fail "bad hours not reported: $out"
+printf '%s\n' 'plugin view (bad overdue hours): PASS'
+
+# --- F1: a stale close event must not delete a live re-registration ---
+p3="$(h pane split "$first" --direction down --no-focus | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
+h pane run "$p3" "$(runcmd alpha)" >/dev/null
+for _ in $(seq 1 60); do grep -q $'^alpha\t'"$p3"$'\t' "$reg" && break; sleep 0.15; done
+grep -q $'^alpha\t'"$p3"$'\t' "$reg" || fail "alpha did not re-register on $p3"
+# Reproduce the race exactly: the hook's registry lookup sees the STALE row (alpha on
+# $p2, read before the re-registration), while the registry already holds alpha on $p3.
+race="$tmp/race"; mkdir -p "$race/bin"
+cat > "$race/bin/letterbox" <<RACE
+#!/usr/bin/env bash
+if [[ "\$1 \$2" == "herdr status" ]]; then
+  printf 'agent\tpane_id\tsocket_path\tregistered_at\n'
+  printf 'alpha\t%s\t%s\t2026-01-01T00:00:00Z\n' "$p2" "$socket"
+  exit 0
+fi
+exec "$letterbox" "\$@"
+RACE
+chmod +x "$race/bin/letterbox"
+HERDR_PLUGIN_ROOT="$race" HERDR_SOCKET_PATH="$socket" HERDR_PLUGIN_EVENT=pane.closed \
+  HERDR_PLUGIN_EVENT_JSON="{\"event\":\"pane_closed\",\"data\":{\"pane_id\":\"$p2\"}}" \
+  env -u LETTERBOX_DIR bash "$root/plugin/on-pane-gone.sh" >/dev/null
+grep -q $'^alpha\t'"$p3"$'\t' "$reg" || fail "stale close event for $p2 deleted alpha's live registration on $p3"
+printf '%s\n' 'stale close event keeps a live re-registration: PASS'
+
 # --- action: opens the popup without error ---
 act="$(h plugin action invoke agent-letterbox.open 2>&1)" || fail "action invoke: $act"
 printf '%s' "$act" | grep -q '"error"' && fail "action returned an error: $act"
@@ -99,8 +147,8 @@ printf '%s\n' 'plugin action open: PASS'
 
 # --- event: closing alpha's pane removes ONLY alpha's registration ---
 focused="$(h pane list | python3 -c 'import sys,json; print(next((p["pane_id"] for p in json.load(sys.stdin)["result"]["panes"] if p.get("focused")),""))')"
-[[ -n "$focused" && "$focused" != "$p2" ]] || fail "expected a focused pane other than $p2 (focused=$focused)"
-h pane close "$p2" >/dev/null || fail "pane close"
+[[ -n "$focused" && "$focused" != "$p3" ]] || fail "expected a focused pane other than $p3 (focused=$focused)"
+h pane close "$p3" >/dev/null || fail "pane close"
 gone=0
 for _ in $(seq 1 60); do grep -q $'^alpha\t' "$reg" || { gone=1; break; }; sleep 0.15; done
 [[ "$gone" == 1 ]] || fail "alpha still registered after its pane closed: $(cat "$reg")"

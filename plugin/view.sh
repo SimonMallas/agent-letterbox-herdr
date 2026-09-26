@@ -8,6 +8,10 @@ set +e
 
 finish() { printf '\nPress any key to close.'; read -r -n 1 _ 2>/dev/null || true; exit 0; }
 
+if ! have_python; then
+  printf 'Agent Letterbox\n\npython3 was not found. The popup needs Python 3.9 or newer (the query layer does too).\n'
+  finish
+fi
 if ! resolve_box; then
   printf 'Agent Letterbox\n\nNo Letterbox found. Run `letterbox herdr setup` first, or set LETTERBOX_DIR in\n%s/letterbox.env\n' "${HERDR_PLUGIN_CONFIG_DIR:-the plugin config dir}"
   finish
@@ -15,6 +19,11 @@ fi
 pane="$(focused_pane)"
 agent="$(agent_for_pane "$pane" "${HERDR_SOCKET_PATH:-}")"
 hours="${LETTERBOX_PLUGIN_OVERDUE_HOURS:-24}"
+hours_note=''
+if ! [[ "$hours" =~ ^[0-9]+([.][0-9]+)?$ ]] || [[ "$hours" =~ ^0+([.]0+)?$ ]]; then
+  hours_note="LETTERBOX_PLUGIN_OVERDUE_HOURS=$hours is not a positive number; using 24."
+  hours=24
+fi
 
 if [[ -z "$agent" ]]; then
   printf 'Agent Letterbox\n\nThis pane (%s) is not registered as a Letterbox agent.\n' "${pane:-unknown}"
@@ -22,16 +31,18 @@ if [[ -z "$agent" ]]; then
   finish
 fi
 
-owed() { # extra filters...
-  LETTERBOX_AGENT="$agent" "$LB" query --compat-v2 --participant "$agent" \
-    to="$agent" state=open answered=no type=request "$@" 2>/dev/null | python3 "$here/brief.py"
+# One line per letter; control characters stripped as a second layer.
+listing() { # filters...
+  LETTERBOX_AGENT="$agent" "$LB" query --compat-v2 --participant "$agent" to="$agent" "$@" 2>/dev/null \
+    | python3 "$here/brief.py" | LC_ALL=C tr -d '\000-\011\013-\037\177'
 }
 until_ts="$(python3 -c 'import datetime,sys; t=datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=float(sys.argv[1])); print(t.strftime("%Y-%m-%dT%H:%M:%SZ"))' "$hours")"
 printf 'Agent Letterbox: %s   (box %s)\n\n' "$agent" "$LETTERBOX_DIR"
-printf 'Inbox\n'
-LETTERBOX_AGENT="$agent" "$LB" check 2>&1 | sed 's/^/  /' | head -n 20
+[[ -n "$hours_note" ]] && printf '%s\n\n' "$hours_note"
+printf 'Inbox (open letters to %s)\n' "$agent"
+listing state=open
 printf '\nWhat I owe (open requests, no answer yet)\n'
-owed
+listing state=open answered=no type=request
 printf '\nOverdue (open, unanswered, sent more than %s h ago)\n' "$hours"
-owed until="$until_ts"
+listing state=open answered=no type=request until="$until_ts"
 finish

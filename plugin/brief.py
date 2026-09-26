@@ -2,7 +2,7 @@
 import json
 import sys
 
-LIMIT = 12
+LIMIT = 5
 try:
     data = json.load(sys.stdin)
 except ValueError:

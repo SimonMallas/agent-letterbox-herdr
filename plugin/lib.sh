@@ -15,6 +15,9 @@ if [[ -n "${HERDR_PLUGIN_CONFIG_DIR:-}" && -f "$HERDR_PLUGIN_CONFIG_DIR/letterbo
   set +a
 fi
 
+# The popup and hooks need python3 (the query layer already requires Python 3.9+).
+have_python() { command -v python3 >/dev/null 2>&1; }
+
 # Resolve the Letterbox explicitly: the plugin's letterbox.env, else the box that
 # `letterbox herdr setup` recorded. Never fall back to a .letterbox in the plugin tree.
 resolve_box() {
