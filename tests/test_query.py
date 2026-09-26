@@ -29,7 +29,10 @@ class MailboxCase(unittest.TestCase):
         for agent in ("alpha", "beta"):
             for folder in ("inbox", "processed"):
                 (self.box / agent / folder).mkdir(parents=True)
-        self.env = dict(os.environ, LETTERBOX_DIR=str(self.box), LETTERBOX_AGENT="alpha")
+        # Drop any HERDR_* inherited from a Herdr pane (for example HERDR_BIN_PATH),
+        # so tests use their own mocks when the suite is run inside Herdr.
+        inherited = {k: v for k, v in os.environ.items() if not k.startswith("HERDR_")}
+        self.env = dict(inherited, LETTERBOX_DIR=str(self.box), LETTERBOX_AGENT="alpha")
         # Ensure the CLI uses the interpreter running this test suite.
         self.tools = self.work / "tools"
         self.tools.mkdir()

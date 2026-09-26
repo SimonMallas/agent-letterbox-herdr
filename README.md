@@ -222,6 +222,18 @@ herdr plugin install SimonMallas/agent-letterbox-herdr
 
 The plugin adds a **Letterbox: inbox, owed, overdue** action that opens a popup for the focused agent: its inbox, the open requests it owes, and requests unanswered for more than 24 hours (set `LETTERBOX_PLUGIN_OVERDUE_HOURS` in the plugin's `letterbox.env`, under `herdr plugin config-dir agent-letterbox`). The popup is read-only. When a registered agent's pane closes or exits, the plugin removes that registration so doorbells stop targeting a dead pane. It uses the Letterbox you set up with `letterbox herdr setup` (or `LETTERBOX_DIR`, if set in the plugin's `letterbox.env` or Herdr's environment, which takes precedence); agents still start with `letterbox herdr run`. It needs `python3` (3.9+), like `letterbox query`. Like any Herdr plugin it runs as you, unsandboxed: read `herdr-plugin.toml` and `plugin/` before installing.
 
+To open it with a key, add this to Herdr's `config.toml` and run `herdr server reload-config`; then focus an agent's pane and press your prefix, then `l`:
+
+```toml
+[[keys.command]]
+key = "prefix+l"
+type = "plugin_action"
+command = "agent-letterbox.open"
+description = "Letterbox: inbox, owed, overdue"
+```
+
+The action is a Herdr command, not a prompt: do not type its name into an agent.
+
 ### Or: add the skill straight to your agent
 
 ```bash

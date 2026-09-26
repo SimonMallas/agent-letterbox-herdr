@@ -5,6 +5,7 @@ All notable changes to Agent Letterbox for Herdr are documented here.
 ## Unreleased (Herdr edition)
 
 - Add a Herdr plugin (`herdr-plugin.toml` at the repository root; `herdr plugin install SimonMallas/agent-letterbox-herdr`, Herdr 0.9.1+): a read-only popup with the focused agent's inbox, open requests it owes, and overdue requests; and `pane.closed` / `pane.exited` hooks that unregister the pane's agent.
+- Tests no longer inherit a Herdr pane's `HERDR_*` environment (`test_query.py` strips it; `make` unexports it), so the suite passes when run inside Herdr.
 - Add `tests/test_herdr_plugin.sh`, a live plugin suite on an isolated Herdr session (config and state), run in `make ci` and required by the CI native gate.
 - `letterbox herdr unregister <agent> --pane <id> --socket <path>` removes the registration only if the agent is still on that pane and socket, in one pass, so a late pane-close cannot delete an agent that re-registered elsewhere. Without the flags, behaviour is unchanged.
 - `letterbox herdr register` and `unregister` now hold a lock for their whole registry read-modify-write, so an automatic cleanup and a new registration cannot overwrite each other.

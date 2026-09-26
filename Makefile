@@ -1,5 +1,9 @@
 .PHONY: test ci
 
+# Tests bring their own Herdr mocks and isolated sessions: never inherit a Herdr
+# pane's environment when the suite is run inside Herdr.
+unexport HERDR_BIN_PATH HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_ENV HERDR_SESSION HERDR_WORKSPACE_ID HERDR_TAB_ID
+
 # Run a lifecycle suite and require its final PASS footer (guards set -e early abort).
 define run_lifecycle
 	@out=$$(mktemp); \
