@@ -773,7 +773,7 @@ break_stale_lifecycle_lock() { # $1 = lock dir
     my $got = 0;
     for (1 .. 500) { if (flock($g, LOCK_EX | LOCK_NB)) { $got = 1; last } select(undef, undef, undef, 0.01) }
     exit 1 unless $got;
-    exit 0 unless -d $lock;
+    exit 0 unless -d $lock;                     # already gone: retry the mkdir
     my $stale;
     my $pid = "";
     if (open(my $p, "<", "$lock/pid")) { $pid = <$p> // ""; chomp $pid; close $p }
@@ -783,7 +783,8 @@ break_stale_lifecycle_lock() { # $1 = lock dir
       my $mtime = (stat $lock)[9] // time;
       $stale = (time - $mtime) >= 2;
     }
-    if ($stale) { unlink "$lock/pid"; rmdir $lock }
+    exit 2 unless $stale;                       # nothing removed: caller counts a try
+    unlink "$lock/pid"; rmdir $lock;
     exit 0' "$gate" "$lock"
 }
 

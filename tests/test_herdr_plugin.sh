@@ -252,4 +252,16 @@ p6="$(h pane split "$first" --direction down --no-focus | python3 -c 'import sys
 stale_case 'stale lock waits for the gate' gamma "$p5" "$box"
 stale_case 'stale lock across two roots sharing one registry' epsilon "$p6" "$box2"
 
+# --- A lock held under another user's live pid is never broken, and never hangs ---
+mkdir "$lock"; printf '1\n' > "$lock/pid"
+start_s=$SECONDS
+if LETTERBOX_DIR="$box" perl -e 'alarm 45; exec @ARGV' "$letterbox" herdr unregister nobody >/dev/null 2>&1; then
+  fail "foreign live pid: unregister succeeded through a live owner's lock"
+fi
+rc=$?
+[[ "$rc" -ne 142 ]] || fail "foreign live pid: unregister hung (killed by the 45 s alarm)"
+[[ -d "$lock" ]] || fail "foreign live pid: a live owner's lock was removed"
+rm -f "$lock/pid"; rmdir "$lock"
+printf '%s\n' "foreign live pid fails loudly in $((SECONDS - start_s)) s: PASS"
+
 printf '%s\n' 'herdr plugin suite: PASS'
