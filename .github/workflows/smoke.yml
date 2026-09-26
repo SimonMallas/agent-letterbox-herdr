@@ -72,3 +72,7 @@ jobs:
             echo "native bootstrap suite did not prove it ran (no PASS line)" >&2
             exit 1
           }
+          grep -qF 'herdr plugin suite: PASS' smoke.log || {
+            echo "herdr plugin suite did not prove it ran (no PASS line)" >&2
+            exit 1
+          }

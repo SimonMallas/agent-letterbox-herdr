@@ -39,6 +39,7 @@ test:
 	./tests/test_confirm_v03.sh
 	./tests/herdr-doorbell-safety.sh
 	./tests/test_herdr_bootstrap.sh
+	$(call run_lifecycle,tests/test_herdr_plugin.sh,herdr plugin suite: PASS)
 
 	./tests/test_doorbell_docs_drift.sh
 	./tests/test_doorbell_docs_drift_mutation.sh

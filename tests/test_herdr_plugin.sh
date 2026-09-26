@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Live proof of the Agent Letterbox Herdr plugin on a disposable, fully isolated
+# Herdr session (config AND state dirs). Never touches the user's Herdr.
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+letterbox="$root/bin/letterbox"
+
+command -v herdr >/dev/null 2>&1 || { echo 'herdr plugin test: SKIP (herdr unavailable)'; exit 0; }
+command -v python3 >/dev/null 2>&1 || { echo 'herdr plugin test: FAIL (python3 required)'; exit 1; }
+
+tmp="/tmp/lbq$$"
+rm -rf "$tmp"; mkdir -p "$tmp"
+sess="q$$"; herdr_pid=""
+export XDG_CONFIG_HOME="$tmp/x" XDG_STATE_HOME="$tmp/s" HERDR_CONFIG_PATH="$tmp/x/h"
+mkdir -p "$HERDR_CONFIG_PATH" "$XDG_STATE_HOME"
+unset HERDR_SOCKET_PATH HERDR_SESSION HERDR_PANE_ID HERDR_ENV || true
+
+cleanup() {
+  set +e
+  herdr --session "$sess" session stop "$sess" >/dev/null 2>&1
+  herdr --session "$sess" session delete "$sess" >/dev/null 2>&1
+  [[ -n "$herdr_pid" ]] && { kill "$herdr_pid" >/dev/null 2>&1; wait "$herdr_pid" 2>/dev/null; }
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+h() { herdr --session "$sess" "$@"; }
+fail() { echo "herdr plugin test: FAIL ($*)" >&2; exit 1; }
+
+python3 - "$sess" <<'PY' &
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir("/tmp"); env = os.environ.copy(); env["TERM"] = "xterm-256color"
+    os.execvpe("herdr", ["herdr", "--session", sys.argv[1]], env)
+while True:
+    try: os.read(fd, 1024)
+    except OSError: break
+os.waitpid(pid, 0)
+PY
+herdr_pid=$!
+for _ in $(seq 1 80); do h pane list >/dev/null 2>&1 && break; sleep 0.1; done
+h pane list >/dev/null 2>&1 || fail "isolated Herdr did not start"
+socket="$(h status 2>/dev/null | awk -F': ' '/socket:/{print $2; exit}' | tr -d '[:space:]')"
+case "$socket" in "$XDG_CONFIG_HOME"/*|"$HERDR_CONFIG_PATH"/*) ;; *) fail "socket not isolated: $socket";; esac
+first="$(h pane list | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["panes"][0]["pane_id"])')"
+
+box="$tmp/box"
+HOME="$tmp/home" LETTERBOX_BIN_DIR="$tmp/bin" LETTERBOX_SKILLS_DIR="$tmp/skills" \
+  "$letterbox" herdr setup --agents alpha,beta --dir "$box" >/dev/null
+reg="$box/herdr-agents.tsv"
+
+# --- link: the repository root is the plugin ---
+h plugin link "$root" >/dev/null || fail "plugin link"
+listing="$(h plugin list 2>&1)"
+printf '%s\n' "$listing" | grep -q 'agent-letterbox .*enabled' || fail "plugin not listed as enabled: $listing"
+printf '%s\n' 'plugin link: PASS'
+
+# --- register alpha in a new pane, beta in the first pane ---
+split="$(h pane split "$first" --direction right)"
+p2="$(printf '%s' "$split" | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
+runcmd() { printf "export PATH='%s/bin:'\"\$PATH\" LETTERBOX_DIR='%s' LETTERBOX_HERDR_REGISTRY='%s'; letterbox herdr run %s -- cat" "$root" "$box" "$reg" "$1"; }
+h pane run "$p2" "$(runcmd alpha)" >/dev/null
+h pane run "$first" "$(runcmd beta)" >/dev/null
+for _ in $(seq 1 60); do
+  grep -q $'^alpha\t' "$reg" 2>/dev/null && grep -q $'^beta\t' "$reg" 2>/dev/null && break; sleep 0.15
+done
+grep -q $'^alpha\t'"$p2"$'\t' "$reg" || fail "alpha not registered on $p2"
+grep -q $'^beta\t'"$first"$'\t' "$reg" || fail "beta not registered on $first"
+
+# --- view: the focused agent's inbox and owed requests ---
+printf 'Please review the parser.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request parser-review >/dev/null
+view() { # $1 = focused pane
+  printf 'x' | HERDR_PLUGIN_ROOT="$root" HERDR_SOCKET_PATH="$socket" LETTERBOX_DIR="$box" \
+    HERDR_PLUGIN_CONTEXT_JSON="{\"focused_pane_id\":\"$1\"}" bash "$root/plugin/view.sh" 2>&1
+}
+out="$(view "$p2")"
+printf '%s\n' "$out" | grep -q 'Agent Letterbox: alpha' || fail "view did not resolve alpha: $out"
+printf '%s\n' "$out" | grep -q '== What I owe' || fail "view missing owed section"
+printf '%s\n' "$out" | grep -q 'parser-review' || fail "owed section missing the open request: $out"
+printf '%s\n' "$out" | grep -q '== Overdue' || fail "view missing overdue section"
+printf '%s\n' 'plugin view (registered agent): PASS'
+out="$(view "no-such-pane")"
+printf '%s\n' "$out" | grep -q 'not registered as a Letterbox agent' || fail "unregistered pane message missing: $out"
+printf '%s\n' 'plugin view (unregistered pane): PASS'
+
+# --- action: opens the popup without error ---
+act="$(h plugin action invoke agent-letterbox.open 2>&1)" || fail "action invoke: $act"
+printf '%s' "$act" | grep -q '"error"' && fail "action returned an error: $act"
+printf '%s\n' 'plugin action open: PASS'
+
+# --- event: closing alpha's pane removes ONLY alpha's registration ---
+h pane close "$p2" >/dev/null || fail "pane close"
+gone=0
+for _ in $(seq 1 60); do grep -q $'^alpha\t' "$reg" || { gone=1; break; }; sleep 0.15; done
+[[ "$gone" == 1 ]] || fail "alpha still registered after its pane closed: $(cat "$reg")"
+grep -q $'^beta\t'"$first"$'\t' "$reg" || fail "beta registration was removed too"
+printf '%s\n' 'plugin pane.closed cleanup: PASS'
+
+printf '%s\n' 'herdr plugin suite: PASS'

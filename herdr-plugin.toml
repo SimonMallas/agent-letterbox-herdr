@@ -1,0 +1,27 @@
+id = "agent-letterbox"
+name = "Agent Letterbox"
+version = "0.6.0"
+min_herdr_version = "0.9.1"
+description = "Durable agent-to-agent mail for your Herdr panes: see your inbox, what you owe, and what is overdue; clean up registrations when panes close."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "open"
+title = "Letterbox: inbox, owed, overdue"
+command = ["bash", "plugin/open.sh"]
+
+[[panes]]
+id = "letterbox"
+title = "Agent Letterbox"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["bash", "plugin/view.sh"]
+
+[[events]]
+on = "pane.closed"
+command = ["bash", "plugin/on-pane-gone.sh"]
+
+[[events]]
+on = "pane.exited"
+command = ["bash", "plugin/on-pane-gone.sh"]
