@@ -57,7 +57,7 @@ printf '%s\n' "$listing" | grep -q 'agent-letterbox .*enabled' || fail "plugin n
 printf '%s\n' 'plugin link: PASS'
 
 # --- register alpha in a new pane, beta in the first pane ---
-split="$(h pane split "$first" --direction right)"
+split="$(h pane split "$first" --direction right --no-focus)"
 p2="$(printf '%s' "$split" | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
 runcmd() { printf "export PATH='%s/bin:'\"\$PATH\" LETTERBOX_DIR='%s' LETTERBOX_HERDR_REGISTRY='%s'; letterbox herdr run %s -- cat" "$root" "$box" "$reg" "$1"; }
 h pane run "$p2" "$(runcmd alpha)" >/dev/null
@@ -70,19 +70,27 @@ grep -q $'^beta\t'"$first"$'\t' "$reg" || fail "beta not registered on $first"
 
 # --- view: the focused agent's inbox and owed requests ---
 printf 'Please review the parser.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request parser-review >/dev/null
-view() { # $1 = focused pane
-  printf 'x' | HERDR_PLUGIN_ROOT="$root" HERDR_SOCKET_PATH="$socket" LETTERBOX_DIR="$box" \
+view() { # $1 = focused pane; no LETTERBOX_DIR: the plugin must find the box setup recorded
+  printf 'x' | env -u LETTERBOX_DIR HERDR_PLUGIN_ROOT="$root" HERDR_SOCKET_PATH="$socket" \
     HERDR_PLUGIN_CONTEXT_JSON="{\"focused_pane_id\":\"$1\"}" bash "$root/plugin/view.sh" 2>&1
 }
 out="$(view "$p2")"
 printf '%s\n' "$out" | grep -q 'Agent Letterbox: alpha' || fail "view did not resolve alpha: $out"
-printf '%s\n' "$out" | grep -q '== What I owe' || fail "view missing owed section"
-printf '%s\n' "$out" | grep -q 'parser-review' || fail "owed section missing the open request: $out"
-printf '%s\n' "$out" | grep -q '== Overdue' || fail "view missing overdue section"
+box_real="$(cd "$box" && pwd -P)"
+printf '%s\n' "$out" | grep -qF "(box $box_real)" || fail "view did not use the box setup recorded: $out"
+printf '%s\n' "$out" | grep -q '^What I owe' || fail "view missing owed section"
+printf '%s\n' "$out" | grep -qE '^  .* from beta +request +parser-review' || fail "owed line missing the open request: $out"
+printf '%s\n' "$out" | grep -q '^Overdue' || fail "view missing overdue section"
+[[ "$(printf '%s\n' "$out" | wc -l)" -le 30 ]] || fail "view too tall for the popup: $(printf '%s\n' "$out" | wc -l) lines"
 printf '%s\n' 'plugin view (registered agent): PASS'
 out="$(view "no-such-pane")"
 printf '%s\n' "$out" | grep -q 'not registered as a Letterbox agent' || fail "unregistered pane message missing: $out"
 printf '%s\n' 'plugin view (unregistered pane): PASS'
+out="$(printf 'x' | env -u LETTERBOX_DIR XDG_CONFIG_HOME="$tmp/empty" HERDR_PLUGIN_ROOT="$root" HERDR_SOCKET_PATH="$socket" \
+  HERDR_PLUGIN_CONTEXT_JSON="{\"focused_pane_id\":\"$p2\"}" bash "$root/plugin/view.sh" 2>&1)"
+printf '%s\n' "$out" | grep -q 'No Letterbox found' || fail "no-box message missing: $out"
+[[ ! -e "$root/.letterbox" && ! -e "$root/plugin/.letterbox" ]] || fail "plugin created a .letterbox in its own tree"
+printf '%s\n' 'plugin view (no box): PASS'
 
 # --- action: opens the popup without error ---
 act="$(h plugin action invoke agent-letterbox.open 2>&1)" || fail "action invoke: $act"
@@ -90,6 +98,8 @@ printf '%s' "$act" | grep -q '"error"' && fail "action returned an error: $act"
 printf '%s\n' 'plugin action open: PASS'
 
 # --- event: closing alpha's pane removes ONLY alpha's registration ---
+focused="$(h pane list | python3 -c 'import sys,json; print(next((p["pane_id"] for p in json.load(sys.stdin)["result"]["panes"] if p.get("focused")),""))')"
+[[ -n "$focused" && "$focused" != "$p2" ]] || fail "expected a focused pane other than $p2 (focused=$focused)"
 h pane close "$p2" >/dev/null || fail "pane close"
 gone=0
 for _ in $(seq 1 60); do grep -q $'^alpha\t' "$reg" || { gone=1; break; }; sleep 0.15; done

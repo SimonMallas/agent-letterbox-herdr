@@ -4,10 +4,10 @@
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-pane="${HERDR_PANE_ID:-}"
-if [[ -z "$pane" ]]; then
-  pane="$(python3 -c 'import json,os; d=json.loads(os.environ.get("HERDR_PLUGIN_EVENT_JSON") or "{}").get("data",{}); print(d.get("pane_id") or (d.get("pane") or {}).get("pane_id",""), end="")')"
-fi
+resolve_box || { printf 'agent-letterbox: no Letterbox found; nothing to clean up\n'; exit 0; }
+# The event payload names the pane that closed; fall back to HERDR_PANE_ID only if absent.
+pane="$(python3 -c 'import json,os; d=json.loads(os.environ.get("HERDR_PLUGIN_EVENT_JSON") or "{}").get("data",{}); print(d.get("pane_id") or (d.get("pane") or {}).get("pane_id",""), end="")')"
+pane="${pane:-${HERDR_PANE_ID:-}}"
 agent="$(agent_for_pane "$pane" "${HERDR_SOCKET_PATH:-}")"
 if [[ -n "$agent" ]]; then
   "$LB" herdr unregister "$agent"
