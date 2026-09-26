@@ -319,15 +319,18 @@ cmd_herdr_register() {
   mkdir -p "$BOX/$agent/inbox" "$BOX/$agent/processed" "$BOX/locks"
   registry="$(herdr_registry_path)"
   mkdir -p "$(dirname "$registry")"
+  # One writer at a time: registration and cleanup both read-modify-write this file.
+  acquire_lifecycle_lock "$registry"
   if [[ -f "$registry" ]]; then
     owner="$(awk -F '\t' -v pane="$pane" -v sock="$socket" '$2 == pane && $3 == sock { print $1; exit }' "$registry")"
-    [[ -z "$owner" || "$owner" == "$agent" ]] || die "pane $pane on $socket is already registered to $owner"
+    [[ -z "$owner" || "$owner" == "$agent" ]] || { release_lifecycle_lock; die "pane $pane on $socket is already registered to $owner"; }
   fi
   tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
   [[ -f "$registry" ]] && awk -F '\t' -v agent="$agent" '$1 != agent { print }' "$registry" > "$tmp"
   # agent<TAB>pane_id<TAB>socket_path<TAB>registered_at
   printf '%s\t%s\t%s\t%s\n' "$agent" "$pane" "$socket" "$(now)" >> "$tmp"
   mv "$tmp" "$registry"
+  release_lifecycle_lock
   printf 'registered: %s → %s (socket %s)\n' "$agent" "$pane" "$socket"
 }
 
@@ -353,6 +356,7 @@ cmd_herdr_unregister() {
   [[ -z "$pane" && -z "$socket" || -n "$pane" && -n "$socket" ]] || die 'herdr unregister: --pane and --socket go together'
   registry="$(herdr_registry_path)"
   [[ -f "$registry" ]] || { printf 'no herdr registration for %s\n' "$agent"; return; }
+  acquire_lifecycle_lock "$registry"
   tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
   # Guarded form removes the row only if agent, pane and socket all still match, in
   # one pass: an agent that re-registered elsewhere meanwhile keeps its new row.
@@ -362,6 +366,7 @@ cmd_herdr_unregister() {
     END { print removed + 0 > "/dev/stderr" }' "$registry" > "$tmp" 2> "$tmp.n"
   removed="$(<"$tmp.n")"; rm -f "$tmp.n"
   mv "$tmp" "$registry"
+  release_lifecycle_lock
   if [[ "$removed" -gt 0 ]]; then
     printf 'unregistered: %s\n' "$agent"
   else

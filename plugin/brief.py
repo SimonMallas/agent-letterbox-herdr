@@ -11,11 +11,19 @@ except ValueError:
 cards = data.get("cards", [])
 if not cards:
     print("  none in scope (an empty answer is not proof it never happened)")
+uncertain = 0
 for card in cards[:LIMIT]:
     f = card.get("fields", {})
     ident = f.get("id") or card.get("identity") or ""
     when = (f.get("sent") or card.get("publication_utc") or "time unknown")[:16].replace("T", " ")
-    print(f"  {when}  from {f.get('from') or '?':<12} {f.get('type') or '?':<9} {card.get('slug') or ''}  [{ident[-8:]}]")
+    unknown = card.get("unknown_filters") or []
+    doubtful = card.get("selection") == "indeterminate" or bool(unknown)
+    mark = "?" if doubtful else " "
+    note = f"  (uncertain: {', '.join(unknown) or 'selection'})" if doubtful else ""
+    print(f" {mark}{when}  from {f.get('from') or '?':<12} {f.get('type') or '?':<9} {card.get('slug') or ''}  [{ident[-8:]}]{note}")
+uncertain = sum(1 for c in cards if c.get("selection") == "indeterminate" or c.get("unknown_filters"))
+if uncertain:
+    print(f"  ? {uncertain} row(s) the query could not classify: they may not belong in this list")
 if len(cards) > LIMIT:
     print(f"  +{len(cards) - LIMIT} more (letterbox query ... for the full list)")
 if not data.get("complete", False):

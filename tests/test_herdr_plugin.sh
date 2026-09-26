@@ -111,6 +111,17 @@ printf '%s' "$chk" | grep -q 'progress: half' || fail "progress note missing fro
 printf '%s' "$(view "$p2")" | grep -q $'\033' && fail "popup passed an escape sequence through"
 printf '%s\n' 'progress note control characters stripped: PASS'
 
+# --- R2: an answer in the sender's mailbox keeps finished work out of "What I owe" ---
+printf 'Check the lexer.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request lexer-check >/dev/null
+lid="$(ls "$box/alpha/inbox/" | grep 'lexer-check' | head -1 | sed 's/\.md$//')"
+printf 'Done.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=alpha "$letterbox" reply "$lid" result lexer-done >/dev/null
+# Simulate the archive step failing after the RESULT was published: parent back in the inbox.
+[[ -f "$box/alpha/processed/$lid.md" ]] && mv "$box/alpha/processed/$lid.md" "$box/alpha/inbox/$lid.md"
+owed="$(view "$p2" | sed -n '/^What I owe/,/^Overdue/p')"
+printf '%s\n' "$owed" | grep -q '+[0-9]* more' && fail "R2 setup: owed list is capped, so the check would be vacuous: $owed"
+printf '%s\n' "$owed" | grep -q 'lexer-check' && fail "R2: answered request shown as owed: $owed"
+printf '%s\n' 'answered work stays out of what I owe (R2): PASS'
+
 # --- F4: a busy inbox still fits, with an explicit "+N more" ---
 for i in $(seq 1 25); do printf 'task %s\n' "$i" | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request "bulk-$i" >/dev/null; done
 out="$(view "$p2")"
@@ -160,5 +171,52 @@ for _ in $(seq 1 60); do grep -q $'^alpha\t' "$reg" || { gone=1; break; }; sleep
 [[ "$gone" == 1 ]] || fail "alpha still registered after its pane closed: $(cat "$reg")"
 grep -q $'^beta\t'"$first"$'\t' "$reg" || fail "beta registration was removed too"
 printf '%s\n' 'plugin pane.closed cleanup: PASS'
+
+# --- R1: registry writers are serialized (no lost update across cleanup + register) ---
+p4="$(h pane split "$first" --direction down --no-focus | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["pane"]["pane_id"])')"
+printf 'alpha\t%s\t%s\t2026-01-01T00:00:00Z\n' "$p2" "$socket" >> "$reg"
+shim="$tmp/shim"; mkdir -p "$shim"; real_mv="$(command -v mv)"
+cat > "$shim/mv" <<SHIM
+#!/usr/bin/env bash
+# Pause the FIRST registry rename until released; every other mv passes straight through.
+if [[ "\$(basename -- "\${@: -1}")" == "herdr-agents.tsv" && ! -e "$tmp/paused" ]]; then
+  : > "$tmp/paused"
+  for _ in \$(seq 1 200); do [[ -e "$tmp/release" ]] && break; sleep 0.05; done
+fi
+exec "$real_mv" "\$@"
+SHIM
+chmod +x "$shim/mv"
+PATH="$shim:$PATH" LETTERBOX_DIR="$box" "$letterbox" herdr unregister alpha --pane "$p2" --socket "$socket" >/dev/null &
+cleanup_pid=$!
+for _ in $(seq 1 100); do [[ -e "$tmp/paused" ]] && break; sleep 0.05; done
+[[ -e "$tmp/paused" ]] || fail "R1 setup: cleanup never reached its rename"
+HERDR_ENV=1 HERDR_PANE_ID="$p4" HERDR_SOCKET_PATH="$socket" LETTERBOX_DIR="$box" \
+  "$letterbox" herdr register alpha >/dev/null 2>&1 &
+register_pid=$!
+sleep 0.5
+: > "$tmp/release"
+wait "$cleanup_pid" || true
+wait "$register_pid" || true
+grep -q $'^alpha\t'"$p4"$'\t' "$reg" || fail "R1: registration on $p4 lost to an overlapping cleanup: $(cat "$reg")"
+printf '%s\n' 'registry writers serialized (R1): PASS'
+
+# --- R3: rows the query cannot classify are marked, not presented as established ---
+cat > "$box/alpha/inbox/2026-01-01T000000-beta-request-legacy-undated-0badcafe.md" <<LEGACY
+---
+id: 2026-01-01T000000-beta-request-legacy-undated-0badcafe
+from: beta
+to: alpha
+type: request
+re:
+priority: next
+requires_ack: false
+---
+An older letter with no sent header.
+LEGACY
+overdue="$(view "$p4" | sed -n '/^Overdue/,$p')"
+if printf '%s\n' "$overdue" | grep -q 'legacy-undated'; then
+  printf '%s\n' "$overdue" | grep 'legacy-undated' | grep -q 'uncertain' || fail "R3: undated letter shown as established overdue: $overdue"
+fi
+printf '%s\n' 'uncertain rows are marked (R3): PASS'
 
 printf '%s\n' 'herdr plugin suite: PASS'

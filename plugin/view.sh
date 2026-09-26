@@ -33,7 +33,9 @@ fi
 
 # One line per letter; control characters stripped as a second layer.
 listing() { # filters...
-  LETTERBOX_AGENT="$agent" "$LB" query --compat-v2 --participant "$agent" to="$agent" "$@" 2>/dev/null \
+  # Whole team scope: an answer lives in the SENDER's mailbox, so narrowing the scan to
+  # this agent would hide it. to=<agent> only filters what is shown.
+  LETTERBOX_AGENT="$agent" "$LB" query --compat-v2 to="$agent" "$@" 2>/dev/null \
     | python3 "$here/brief.py" | LC_ALL=C tr -d '\000-\011\013-\037\177' | LC_ALL=C sed $'s/\xc2[\x80-\x9f]//g'
 }
 until_ts="$(python3 -c 'import datetime,sys; t=datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=float(sys.argv[1])); print(t.strftime("%Y-%m-%dT%H:%M:%SZ"))' "$hours")"
