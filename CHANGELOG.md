@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## Unreleased (Herdr edition)
+## v0.6.0 — 2026-09-27 (Herdr edition)
 
 - Add a Herdr plugin (`herdr-plugin.toml` at the repository root; `herdr plugin install SimonMallas/agent-letterbox-herdr`, Herdr 0.9.1+): a read-only popup with the focused agent's inbox, open requests it owes, and overdue requests; and `pane.closed` / `pane.exited` hooks that unregister the pane's agent.
 - Tests no longer inherit a Herdr pane's `HERDR_*` environment (`test_query.py` strips it; `make` unexports it), so the suite passes when run inside Herdr.
@@ -10,6 +10,7 @@ All notable changes to Agent Letterbox for Herdr are documented here.
 - `letterbox herdr unregister <agent> --pane <id> --socket <path>` removes the registration only if the agent is still on that pane and socket, in one pass, so a late pane-close cannot delete an agent that re-registered elsewhere. Without the flags, behaviour is unchanged.
 - `letterbox herdr register` and `unregister` now hold a lock for their whole registry read-modify-write, so an automatic cleanup and a new registration cannot overwrite each other.
 - Fix a stale-lock race in the lifecycle lock used for letters and the Herdr registry: when a lock holder died, two waiting processes could both clear the stale lock and proceed together. Stale locks are now cleared one breaker at a time: a short `perl` process takes a kernel-released gate beside the lock (shared by every writer of that lock, even across Letterbox roots that share a registry), re-checks staleness, and removes the lock; waiting for the gate is bounded. A pid file that is empty or unreadable is judged by age instead of blocking forever.
+- A lifecycle lock whose pid belongs to a live process that cannot be signalled (for example another user's) is never broken; waiting for it ends in a "timed out waiting for lifecycle lock" error instead of waiting forever.
 - Progress notes are printed with control characters removed, so a note cannot inject terminal escape sequences (C0 or UTF-8-encoded C1) into `letterbox check` or the plugin popup.
 
 ## v0.5.0 — 2026-09-25 (Herdr edition)
