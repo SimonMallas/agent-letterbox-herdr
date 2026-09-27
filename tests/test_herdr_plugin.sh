@@ -41,7 +41,7 @@ PY
 herdr_pid=$!
 for _ in $(seq 1 80); do h pane list >/dev/null 2>&1 && break; sleep 0.1; done
 h pane list >/dev/null 2>&1 || fail "isolated Herdr did not start"
-socket="$(h status 2>/dev/null | awk -F': ' '/socket:/{print $2; exit}' | tr -d '[:space:]')"
+socket="$(h status 2>/dev/null | awk -F': ' '/socket:/ && !n++ {print $2}' | tr -d '[:space:]')"
 case "$socket" in "$XDG_CONFIG_HOME"/*|"$HERDR_CONFIG_PATH"/*) ;; *) fail "socket not isolated: $socket";; esac
 first="$(h pane list | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["panes"][0]["pane_id"])')"
 
