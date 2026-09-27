@@ -75,6 +75,28 @@ refused "an invalid type is refused" agent bogus "$ID"
 refused "a path-shaped recipient is refused" "agent/." info "$ID"
 refused "a letter in another inbox is not rung for" other info "$ID"
 
+# Admission is the letter's own envelope, not its filename. Each fixture below
+# has the right filename in the right inbox; only what it IS is wrong.
+mkdir -p "$ROOT/outside" "$ROOT/box/sym/processed" "$ROOT/box/other/inbox"
+envelope() { # $1=file $2=id $3=to $4=type
+  printf -- '---\nid: %s\nfrom: telegram-bridge\nto: %s\ntype: %s\n---\nx\n' "$2" "$3" "$4" > "$1"
+}
+X="2026-09-27T120002-telegram-bridge-info-x-0a1b2c3f"
+envelope "$ROOT/box/agent/inbox/$X.md" "$X" other info
+refused "an envelope addressed to someone else is not rung for" agent info "$X"
+envelope "$ROOT/box/agent/inbox/$X.md" "$X" agent request
+refused "an envelope of another type is not rung for" agent info "$X"
+envelope "$ROOT/box/agent/inbox/$X.md" "2026-09-27T120003-someone-else-0a1b2c40" agent info
+refused "an envelope with another id is not rung for" agent info "$X"
+rm -f "$ROOT/box/agent/inbox/$X.md"
+envelope "$ROOT/outside/$X.md" "$X" agent info
+ln -s "$ROOT/outside/$X.md" "$ROOT/box/agent/inbox/$X.md"
+refused "a symlinked letter is not rung for" agent info "$X"
+rm -f "$ROOT/box/agent/inbox/$X.md"
+envelope "$ROOT/outside/$X.md" "$X" sym info
+ln -s "$ROOT/outside" "$ROOT/box/sym/inbox"
+refused "a symlinked inbox is not rung for" sym info "$X"
+
 # The injected line carries the token derived from THIS letter id.
 : > "$ROOT/herdr.log"
 LETTERBOX_HERDR_SUBMIT=1 "$ROOT/lb" ring agent info "$ID" >/dev/null

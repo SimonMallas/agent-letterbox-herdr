@@ -1370,7 +1370,15 @@ cmd_ring() {
   need_agent "$to"
   case "$typ" in request|delegate|status|blocker|result|ack|nack|info) ;; *) die "invalid message type: $typ";; esac
   [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid letter id"
-  [[ -f "$(inbox_path "$to")/$id.md" ]] || die "letter not in $to's inbox: $(safe_id_out "$id")"
+  local f dir
+  dir="$(inbox_path "$to")"
+  f="$dir/$id.md"
+  # A regular file in the real inbox, whose own envelope names this letter:
+  # the filename alone is a claim, and a symlink points somewhere unowned.
+  [[ -f "$f" && ! -L "$f" ]] || die "letter not in $to's inbox: $(safe_id_out "$id")"
+  [[ "$(canonical_dir "$dir")" == "$(canonical_dir "$BOX")/$to/inbox" ]] || die "letter not in $to's inbox: $(safe_id_out "$id")"
+  [[ "$(frontmatter_value "$f" id)" == "$id" && "$(frontmatter_value "$f" to)" == "$to" \
+     && "$(frontmatter_value "$f" type)" == "$typ" ]] || die "letter envelope does not match: $(safe_id_out "$id")"
   ring_doorbell "$to" "$typ" ring "$id"
 }
 
