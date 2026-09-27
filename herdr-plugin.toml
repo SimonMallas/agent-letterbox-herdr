@@ -1,6 +1,6 @@
 id = "agent-letterbox"
 name = "Agent Letterbox"
-version = "0.6.0"
+version = "0.6.1"
 min_herdr_version = "0.9.1"
 description = "Durable agent-to-agent mail for your Herdr panes: see your inbox, what you owe, and what is overdue; clean up registrations when panes close."
 platforms = ["linux", "macos"]
