@@ -23,8 +23,8 @@ exit 0
 HERDR
 chmod +x "$ROOT/bin/herdr"
 
-ID="2026-09-27T120000-telegram-bridge-info-hello-0a1b2c3d"
-printf -- '---\nid: %s\nfrom: telegram-bridge\nto: agent\ntype: info\n---\nhello\n' "$ID" \
+ID="2026-09-27T120000-chat-bridge-info-hello-0a1b2c3d"
+printf -- '---\nid: %s\nfrom: chat-bridge\nto: agent\ntype: info\n---\nhello\n' "$ID" \
   > "$ROOT/box/agent/inbox/$ID.md"
 
 # A wrapper the bridge can exec as ALB_BUS_BINARY: env in, letterbox out.
@@ -79,9 +79,9 @@ refused "a letter in another inbox is not rung for" other info "$ID"
 # has the right filename in the right inbox; only what it IS is wrong.
 mkdir -p "$ROOT/outside" "$ROOT/box/sym/processed" "$ROOT/box/other/inbox"
 envelope() { # $1=file $2=id $3=to $4=type
-  printf -- '---\nid: %s\nfrom: telegram-bridge\nto: %s\ntype: %s\n---\nx\n' "$2" "$3" "$4" > "$1"
+  printf -- '---\nid: %s\nfrom: chat-bridge\nto: %s\ntype: %s\n---\nx\n' "$2" "$3" "$4" > "$1"
 }
-X="2026-09-27T120002-telegram-bridge-info-x-0a1b2c3f"
+X="2026-09-27T120002-chat-bridge-info-x-0a1b2c3f"
 envelope "$ROOT/box/agent/inbox/$X.md" "$X" other info
 refused "an envelope addressed to someone else is not rung for" agent info "$X"
 envelope "$ROOT/box/agent/inbox/$X.md" "$X" agent request
@@ -100,7 +100,7 @@ refused "a symlinked inbox is not rung for" sym info "$X"
 # The injected line carries the token derived from THIS letter id.
 : > "$ROOT/herdr.log"
 LETTERBOX_HERDR_SUBMIT=1 "$ROOT/lb" ring agent info "$ID" >/dev/null
-grep -Eq "pane send-text pane:7 .*unacked info from telegram-bridge in .*/agent/inbox/ — please check · [0-9a-f]{8}$" "$ROOT/herdr.log" \
+grep -Eq "pane send-text pane:7 .*unacked info from chat-bridge in .*/agent/inbox/ — please check · [0-9a-f]{8}$" "$ROOT/herdr.log" \
   && ok "line names the letter's sender and carries a token" \
   || bad "line names the letter's sender and carries a token" "$(cat "$ROOT/herdr.log")"
 
