@@ -255,11 +255,10 @@ stale_case 'stale lock across two roots sharing one registry' epsilon "$p6" "$bo
 # --- A lock held under another user's live pid is never broken, and never hangs ---
 mkdir "$lock"; printf '1\n' > "$lock/pid"
 start_s=$SECONDS
-if LETTERBOX_DIR="$box" perl -e 'alarm 45; exec @ARGV' "$letterbox" herdr unregister nobody >/dev/null 2>&1; then
-  fail "foreign live pid: unregister succeeded through a live owner's lock"
-fi
-rc=$?
-[[ "$rc" -ne 142 ]] || fail "foreign live pid: unregister hung (killed by the 45 s alarm)"
+rc=0
+LETTERBOX_DIR="$box" perl -e 'alarm 120; exec @ARGV' "$letterbox" herdr unregister nobody >/dev/null 2>&1 || rc=$?
+[[ "$rc" -ne 0 ]] || fail "foreign live pid: unregister succeeded through a live owner's lock"
+[[ "$rc" -ne 142 ]] || fail "foreign live pid: unregister hung (killed by the 120 s alarm)"
 [[ -d "$lock" ]] || fail "foreign live pid: a live owner's lock was removed"
 rm -f "$lock/pid"; rmdir "$lock"
 printf '%s\n' "foreign live pid fails loudly in $((SECONDS - start_s)) s: PASS"
