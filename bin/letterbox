@@ -1360,6 +1360,20 @@ cmd_nudge() {
   ring_doorbell "$to" "$typ" nudge "$id"
 }
 
+# Ring for a letter another tool already wrote, in the bus helper's argument
+# shape, so Agent Letter Bridge's integrated mode (ALB_BUS_BINARY) can call
+# this edition directly. The letter must already sit in the recipient's inbox:
+# a ring never announces something that does not exist. Emits exactly one
+# doorbell-outcome v=1 line, like every other ring.
+cmd_ring() {
+  local to="${1:?usage: letterbox ring <to> <type> <id>}" typ="${2:?missing type}" id="${3:?missing id}"
+  need_agent "$to"
+  case "$typ" in request|delegate|status|blocker|result|ack|nack|info) ;; *) die "invalid message type: $typ";; esac
+  [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid letter id"
+  [[ -f "$(inbox_path "$to")/$id.md" ]] || die "letter not in $to's inbox: $(safe_id_out "$id")"
+  ring_doorbell "$to" "$typ" ring "$id"
+}
+
 cmd_token() { # glance-dismiss a doorbell token: unhandled / filed / unknown
   local tok="${1:?usage: letterbox token <8hex>}" f id agent folder m
   local -a matches=()
@@ -1431,17 +1445,18 @@ case "${1:-}" in
   init) shift; cmd_init "$@";; send) shift; cmd_send "$@";; check) shift; cmd_check "$@";;
   reply) shift; cmd_reply "$@";; file) shift; cmd_file "$@";; done) shift; cmd_done "$@";;
   progress) shift; cmd_progress "$@";; read) shift; cmd_read "$@";;
-  nudge) shift; cmd_nudge "$@";; token) shift; cmd_token "$@";;
+  nudge) shift; cmd_nudge "$@";; ring) shift; cmd_ring "$@";; token) shift; cmd_token "$@";;
   lock) shift; cmd_lock "$@";; unlock) shift; cmd_unlock "$@";;
   status) shift; cmd_status "$@";; herdr) shift; cmd_herdr "$@";;
   query) shift; cmd_query "$@";;
   *) printf '%s\n' \
-    'usage: letterbox {init|send|check|reply|file|done|progress|read|nudge|token|query|lock|unlock|status|herdr|--version} ...' \
+    'usage: letterbox {init|send|check|reply|file|done|progress|read|nudge|ring|token|query|lock|unlock|status|herdr|--version} ...' \
     '' \
     'check [agent] [--recent|--thread <id>]   open work, live first, stale last (>14d silence); never prints bodies' \
     'read <id|display-id|token>              print the exact durable letter (own inbox only)' \
     'progress <id|display-id|token> <note>   update the .ack sidecar of accepted work; no new letter' \
     'nudge <id|display-id|token>             re-ring an open letter; creates nothing; terminal refuses' \
+    'ring <to> <type> <id>                   ring for a letter already in <to>/inbox (bus helper shape)' \
     'token <8hex>                            resolve a doorbell token: unhandled / filed / unknown' \
     'query [filters] [--compat-v2]           read-only envelope queries; Python 3.9+; see docs/query.md' \
     'file <ref|path> [--read]                path-form inbound result/nack requires --read; ids file directly' \

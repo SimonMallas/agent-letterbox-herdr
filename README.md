@@ -165,8 +165,11 @@ letterbox check                       # open work, live first, stale last; never
 letterbox read <id|display-id|token>  # print the exact durable letter
 letterbox progress <ref> <one-line>   # note progress on accepted work (updates the .ack sidecar)
 letterbox nudge <id|display-id|token> # re-ring an open letter without creating one
+letterbox ring <to> <type> <id>       # ring for a letter another tool already wrote
 letterbox token <8hex>                # resolve a doorbell token (unhandled / filed / unknown)
 ```
+
+`ring` takes the bus helper's argument shape, so [Agent Letter Bridge](https://github.com/SimonMallas/agent-letter-bridge)'s integrated mode can ring a Herdr agent with `ALB_BUS_BINARY` pointed at this `letterbox`. It refuses a letter that is not already in the recipient's inbox and prints one `doorbell-outcome v=1` line.
 
 Doorbell lines may carry an additive opaque token (`… — please check · <8hex>`); tokenless v0.2 lines remain valid doorbells — match by prefix/pattern, never exact equality. A `requires_ack: false` letter may also be closed in one step with `letterbox reply <id> result|nack <slug>`.
 
