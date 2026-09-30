@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## v0.6.1 — Unreleased (Herdr edition)
+## v0.6.1 — 2026-09-30 (Herdr edition)
 
 - Add `letterbox ring <to> <type> <id>`: rings for a letter another tool already wrote, in the bus helper's argument shape, so Agent Letter Bridge's integrated mode can ring a Herdr agent with `ALB_BUS_BINARY` pointed at `letterbox`. It admits only a regular (non-symlink) file in the recipient's canonical inbox whose own envelope `id`, `to` and `type` match the command, and prints one `doorbell-outcome v=1` line.
 - Add `tests/test_ring_verb.sh`, which also runs the released Agent Letter Bridge's own ring caller and parser against this binary. CI installs Agent Letter Bridge 0.4.2 by hash into its own Python 3.13 and fails if that contract does not run.
