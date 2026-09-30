@@ -20,6 +20,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The ring contract test runs the released Agent Letter Bridge against
+      # this binary. The bridge needs Python 3.11+, the matrix includes 3.9,
+      # so it gets its own interpreter, installed by hash, before the matrix
+      # Python takes over `python3`.
+      - name: Set up bridge interpreter
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install pinned Agent Letter Bridge (0.4.2, hash-verified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "${RUNNER_TEMP}/alb"
+          echo 'agent-letter-bridge==0.4.2 --hash=sha256:b01271af0c63cea76abcae3fb894e6e50ac8a04c5466b4d671fb490237e1d59f' > "${RUNNER_TEMP}/alb-req.txt"
+          "${RUNNER_TEMP}/alb/bin/python" -m pip install --require-hashes --only-binary=:all: -r "${RUNNER_TEMP}/alb-req.txt"
+          echo "ALB_PYTHON=${RUNNER_TEMP}/alb/bin/python" >> "${GITHUB_ENV}"
+
       - name: Set up query interpreter
         uses: actions/setup-python@v5
         with:
@@ -70,6 +88,10 @@ jobs:
           fi
           grep -qF 'herdr bootstrap suite: PASS' smoke.log || {
             echo "native bootstrap suite did not prove it ran (no PASS line)" >&2
+            exit 1
+          }
+          grep -qF 'ring verb suite: PASS' smoke.log || {
+            echo "ring verb suite did not prove the bridge contract ran (no PASS line)" >&2
             exit 1
           }
           grep -qF 'herdr plugin suite: PASS' smoke.log || {
