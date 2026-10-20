@@ -27,20 +27,33 @@ trap cleanup EXIT
 h() { herdr --session "$sess" "$@"; }
 fail() { echo "herdr plugin test: FAIL ($*)" >&2; exit 1; }
 
-python3 - "$sess" <<'PY' &
-import os, pty, sys
+python3 - "$sess" "$tmp/startup.log" <<'PY' &
+import fcntl, os, pty, struct, sys, termios
 pid, fd = pty.fork()
 if pid == 0:
+    fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     os.chdir("/tmp"); env = os.environ.copy(); env["TERM"] = "xterm-256color"
     os.execvpe("herdr", ["herdr", "--session", sys.argv[1]], env)
+# Drain the PTY and retain only the last 8 KiB for startup diagnostics.
+tail = b""
 while True:
-    try: os.read(fd, 1024)
-    except OSError: break
+    try:
+        chunk = os.read(fd, 1024)
+        if not chunk:
+            break
+        tail = (tail + chunk)[-8192:]
+        with open(sys.argv[2], "wb") as output:
+            output.write(tail)
+    except OSError:
+        break
 os.waitpid(pid, 0)
 PY
 herdr_pid=$!
 for _ in $(seq 1 80); do h pane list >/dev/null 2>&1 && break; sleep 0.1; done
-h pane list >/dev/null 2>&1 || fail "isolated Herdr did not start"
+if ! h pane list >/dev/null 2>&1; then
+  [[ ! -f "$tmp/startup.log" ]] || cat "$tmp/startup.log" >&2
+  fail "isolated Herdr did not start"
+fi
 socket="$(h status 2>/dev/null | awk -F': ' '/socket:/ && !n++ {print $2}' | tr -d '[:space:]')"
 case "$socket" in "$XDG_CONFIG_HOME"/*|"$HERDR_CONFIG_PATH"/*) ;; *) fail "socket not isolated: $socket";; esac
 first="$(h pane list | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["panes"][0]["pane_id"])')"

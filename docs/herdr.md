@@ -1,6 +1,8 @@
 # Herdr adapter guide
 
-Local-only automatic doorbells for Agent Letterbox using the Herdr 0.9.0 CLI (pane get / send-text / send-keys; live ring verified 2026-09-09).
+Local-only automatic doorbells for Agent Letterbox using the Herdr pane get / send-text / send-keys CLI. The plugin minimum remains Herdr 0.9.1. Native bootstrap and plugin suites have been verified on macOS ARM64 with Herdr 0.9.1 and 0.9.5; CI covers both versions with checksum-verified binaries on Linux and macOS.
+
+The isolated test launchers set a 24×80 PTY grid: Herdr 0.9.5 refuses a zero-sized terminal. They retain a bounded 8 KiB output tail for startup failures. This is a test-harness requirement, not a change to the doorbell protocol. Remote-machine doorbells remain out of scope.
 
 ```text
 letter written to inbox

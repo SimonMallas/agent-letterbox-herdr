@@ -48,9 +48,9 @@ h() {
 }
 
 # Start disposable Herdr server/TUI under a real PTY with isolated config.
-python3 - "$sess" "$HERDR_CONFIG_PATH" "$XDG_CONFIG_HOME" <<'PY' &
-import os, pty, sys, pathlib
-sess, config, xdg = sys.argv[1], sys.argv[2], sys.argv[3]
+python3 - "$sess" "$HERDR_CONFIG_PATH" "$XDG_CONFIG_HOME" "$tmp/startup.log" <<'PY' &
+import fcntl, os, pty, struct, sys, termios
+sess, config, xdg, log = sys.argv[1:]
 env = os.environ.copy()
 env["XDG_CONFIG_HOME"] = xdg
 env["HERDR_CONFIG_PATH"] = config
@@ -59,13 +59,20 @@ env.pop("HERDR_SOCKET_PATH", None)
 env.pop("HERDR_SESSION", None)
 pid, fd = pty.fork()
 if pid == 0:
+    fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     os.chdir("/tmp")
     os.execvpe("herdr", ["herdr", "--session", sess], env)
-# parent: keep PTY open by reading forever until killed
+# Drain the PTY and retain only the last 8 KiB for startup diagnostics.
+tail = b""
 try:
     while True:
         try:
-            os.read(fd, 1024)
+            chunk = os.read(fd, 1024)
+            if not chunk:
+                break
+            tail = (tail + chunk)[-8192:]
+            with open(log, "wb") as output:
+                output.write(tail)
         except OSError:
             break
 except KeyboardInterrupt:
@@ -86,6 +93,7 @@ done
 if [[ "$ready" != 1 ]]; then
   echo 'herdr bootstrap test: FAIL (could not start isolated Herdr session/server)' >&2
   h status >&2 || true
+  [[ ! -f "$tmp/startup.log" ]] || cat "$tmp/startup.log" >&2
   exit 1
 fi
 

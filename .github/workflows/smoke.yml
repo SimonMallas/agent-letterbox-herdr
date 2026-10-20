@@ -9,13 +9,14 @@ permissions:
 
 jobs:
   smoke:
-    name: smoke (${{ matrix.os }}, Python ${{ matrix.python }})
+    name: smoke (${{ matrix.os }}, Python ${{ matrix.python }}, Herdr ${{ matrix.herdr }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         python: ['3.9', '3.13']
+        herdr: ['0.9.5', '0.9.1']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,18 +44,26 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install pinned herdr (v0.9.1, checksum-verified)
+      - name: Install pinned herdr (v${{ matrix.herdr }}, checksum-verified)
         shell: bash
         run: |
           set -euo pipefail
           case "${{ runner.os }}" in
             Linux)
               asset="herdr-linux-x86_64"
-              want="2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7"
+              case "${{ matrix.herdr }}" in
+                0.9.5) want="14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d" ;;
+                0.9.1) want="2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7" ;;
+                *) exit 1 ;;
+              esac
               ;;
             macOS)
               asset="herdr-macos-aarch64"
-              want="5fc7a7e7adfaca56fa80aa89dcb025693357268dab8285b9ce2d08a2313c89de"
+              case "${{ matrix.herdr }}" in
+                0.9.5) want="fb77c2232a05a8035421382c894392f4174e4e38a18e48af3dd0290157c3a7e2" ;;
+                0.9.1) want="5fc7a7e7adfaca56fa80aa89dcb025693357268dab8285b9ce2d08a2313c89de" ;;
+                *) exit 1 ;;
+              esac
               ;;
             *)
               echo "unsupported runner os: ${{ runner.os }}" >&2
@@ -62,7 +71,7 @@ jobs:
               ;;
           esac
           curl -fsSL -o "${RUNNER_TEMP}/herdr" \
-            "https://github.com/herdrdev/herdr/releases/download/v0.9.1/${asset}"
+            "https://github.com/herdrdev/herdr/releases/download/v${{ matrix.herdr }}/${asset}"
           if command -v sha256sum >/dev/null 2>&1; then
             echo "${want}  ${RUNNER_TEMP}/herdr" | sha256sum -c -
           else
