@@ -21,6 +21,6 @@ The line keeps the v0.2 shape; v0.3 appends an opaque token after `please check`
 📬 letterbox doorbell: unacked <type> in <LETTERBOX_DIR>/<agent>/inbox/ — please check · <8hex>
 ```
 
-Outcomes are `submitted`, `pasted_not_submitted`, or `no_live_surface` — a ring never proves the agent read the letter. The helper bounds the adapter run (`LETTERBOX_DOORBELL_TIMEOUT`, default 5s) so an unresponsive pane path cannot hang a sender; the letter is already durable.
+Outcomes are `submitted`, `pasted_not_submitted`, or `no_live_surface` — a ring never proves the agent read the letter. Each adapter step is bounded by `LETTERBOX_DOORBELL_TIMEOUT` (default 1s); the helper also applies an outer backstop. An unresponsive pane path cannot hang a sender; the letter is already durable.
 
 Requires a running local Herdr server. Scope is local-only.
