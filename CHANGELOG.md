@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## Unreleased
+## v0.6.2 — 2026-10-24 (Herdr edition)
 
 - Let `letterbox ring` load the configured box's generated `env.sh` when a Bridge service supplies `LETTERBOX_DIR` without doorbell settings, while preserving explicit settings. The reserved Bridge doctor probe returns its required one-line no-live-surface outcome without requiring or announcing a letter.
 
