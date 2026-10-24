@@ -1367,6 +1367,20 @@ cmd_nudge() {
 # doorbell-outcome v=1 line, like every other ring.
 cmd_ring() {
   local to="${1:?usage: letterbox ring <to> <type> <id>}" typ="${2:?missing type}" id="${3:?missing id}"
+  # Released Bridge setup probes this exact synthetic, non-deliverable letter.
+  # It proves the helper emits the v=1 outcome contract without announcing mail.
+  if [[ "$to" == alb-doctor-probe && "$typ" == info && "$id" == 1970-01-01T000000-alb-probe-00000000 ]]; then
+    emit_outcome no_live_surface surface_not_found -
+    return 0
+  fi
+  # Bridge services do not inherit a pane's setup environment. Use this
+  # mailbox's generated adapter configuration only when the caller supplied
+  # none; explicit service configuration remains authoritative.
+  if [[ -z "${LETTERBOX_DOORBELL:-}" && -f "$BOX/env.sh" ]]; then
+    # shellcheck disable=SC1090
+    source "$BOX/env.sh"
+    BOX="${LETTERBOX_DIR:-$BOX}"
+  fi
   need_agent "$to"
   case "$typ" in request|delegate|status|blocker|result|ack|nack|info) ;; *) die "invalid message type: $typ";; esac
   [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid letter id"

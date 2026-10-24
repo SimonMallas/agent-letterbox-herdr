@@ -165,7 +165,7 @@ letterbox ring <to> <type> <id>       # ring for a letter another tool already w
 letterbox token <8hex>                # resolve a doorbell token (unhandled / filed / unknown)
 ```
 
-`ring` takes the bus helper's argument shape, so [Agent Letter Bridge](https://github.com/SimonMallas/agent-letter-bridge)'s integrated mode can ring a Herdr agent with `ALB_BUS_BINARY` pointed at this `letterbox`. It refuses a letter that is not already in the recipient's inbox and prints one `doorbell-outcome v=1` line.
+`ring` takes the bus helper's argument shape, so [Agent Letter Bridge](https://github.com/SimonMallas/agent-letter-bridge)'s integrated mode can ring a Herdr agent with `ALB_BUS_BINARY` pointed at this `letterbox`. It refuses a letter that is not already in the recipient's inbox and prints one `doorbell-outcome v=1` line. When a Bridge service supplies `LETTERBOX_DIR` but no doorbell settings, `ring` loads that box's generated `env.sh`; explicit service doorbell settings take precedence. The Bridge setup probe uses a reserved synthetic recipient and returns the same one-line no-live-surface contract without announcing mail.
 
 Doorbell lines may carry an additive opaque token (`… — please check · <8hex>`); tokenless v0.2 lines remain valid doorbells — match by prefix/pattern, never exact equality. A `requires_ack: false` letter may also be closed in one step with `letterbox reply <id> result|nack <slug>`.
 

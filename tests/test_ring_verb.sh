@@ -31,8 +31,11 @@ printf -- '---\nid: %s\nfrom: chat-bridge\nto: agent\ntype: info\n---\nhello\n' 
 cat > "$ROOT/lb" <<SH
 #!/usr/bin/env bash
 export PATH="$ROOT/bin:\$PATH" HERDR_FAKE_LOG="$ROOT/herdr.log"
-export LETTERBOX_DIR="$ROOT/box" LETTERBOX_DOORBELL="$EDITION/adapters/herdr.sh"
-export LETTERBOX_HERDR_REGISTRY="$ROOT/registry.tsv" LETTERBOX_HERDR_PATTERNS=
+export LETTERBOX_DIR="$ROOT/box"
+if [[ "${NO_CONFIG:-}" != 1 ]]; then
+  export LETTERBOX_DOORBELL="$EDITION/adapters/herdr.sh"
+  export LETTERBOX_HERDR_REGISTRY="$ROOT/registry.tsv" LETTERBOX_HERDR_PATTERNS=
+fi
 export LETTERBOX_DOORBELL_TIMEOUT=3
 exec "$EDITION/bin/letterbox" "\$@"
 SH
@@ -50,11 +53,20 @@ expect_line() { # $1=name $2=expected, rest=env for this run
 
 expect_line "submitted to the registered pane" \
   'doorbell-outcome v=1 outcome=submitted reason=- target=pane:7' LETTERBOX_HERDR_SUBMIT=1
+printf "export LETTERBOX_DIR='%s'\nexport LETTERBOX_DOORBELL='%s/adapters/herdr.sh'\nexport LETTERBOX_HERDR_REGISTRY='%s'\nexport LETTERBOX_HERDR_PATTERNS=''\n" \
+  "$ROOT/box" "$EDITION" "$ROOT/registry.tsv" > "$ROOT/box/env.sh"
+expect_line "loads mailbox env for a Bridge service" \
+  'doorbell-outcome v=1 outcome=submitted reason=- target=pane:7' NO_CONFIG=1 LETTERBOX_HERDR_SUBMIT=1
 expect_line "without submit it is a toast, never a ring" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=notify_only target=-' LETTERBOX_HERDR_SUBMIT=0
 expect_line "dead pane is surface_not_found" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=surface_not_found target=-' \
   LETTERBOX_HERDR_SUBMIT=1 HERDR_FAKE_GET=fail
+
+probe="$("$ROOT/lb" ring alb-doctor-probe info 1970-01-01T000000-alb-probe-00000000)"
+[[ "$probe" == 'doorbell-outcome v=1 outcome=no_live_surface reason=surface_not_found target=-' ]] \
+  && ok "Bridge capability probe emits one outcome" \
+  || bad "Bridge capability probe emits one outcome" "got: $probe"
 
 refused() { # $1=name, rest=args; must exit nonzero, print no contract line, touch no pane
   local name="$1" out rc=0; shift

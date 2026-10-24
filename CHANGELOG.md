@@ -2,6 +2,10 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
+## Unreleased
+
+- Let `letterbox ring` load the configured box's generated `env.sh` when a Bridge service supplies `LETTERBOX_DIR` without doorbell settings, while preserving explicit settings. The reserved Bridge doctor probe returns its required one-line no-live-surface outcome without requiring or announcing a letter.
+
 ## v0.6.1 — 2026-09-30 (Herdr edition)
 
 - Add `letterbox ring <to> <type> <id>`: rings for a letter another tool already wrote, in the bus helper's argument shape, so Agent Letter Bridge's integrated mode can ring a Herdr agent with `ALB_BUS_BINARY` pointed at `letterbox`. It admits only a regular (non-symlink) file in the recipient's canonical inbox whose own envelope `id`, `to` and `type` match the command, and prints one `doorbell-outcome v=1` line.
