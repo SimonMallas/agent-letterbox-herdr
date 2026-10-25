@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## Unreleased (Herdr edition)
+## v0.6.3 — 2026-10-25 (Herdr edition)
 
 - `letterbox reply` to a letter whose sender has no inbox now says how to answer a person who wrote through Agent Letter Bridge (`alb --reply-to <letter-id>`), instead of only "original sender has no inbox". The generated AGENT-LETTERBOX.md, the skill and the README say the same. Nothing is read from the letter beyond its validated id.
 
