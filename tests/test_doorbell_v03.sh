@@ -246,15 +246,16 @@ sleep 30
 SH
   chmod +x "$box/hang-adapter.sh"
   start="$(date +%s)"
-  out="$(printf 'durable body\n' | LETTERBOX_DOORBELL="$box/hang-adapter.sh" LETTERBOX_DOORBELL_TIMEOUT=1 \
+  out="$(printf 'durable body\n' | LETTERBOX_DOORBELL="$box/hang-adapter.sh" LETTERBOX_DOORBELL_TIMEOUT=1 LETTERBOX_DOORBELL_ENTER_DELAY=2 \
     lb alpha send beta request hang-proof --now 2>&1)"
   end="$(date +%s)"
   [[ "$out" == *sent:* ]] || fail "D5-not-sent: $out"
-  # The wrapper's backstop is 4*LETTERBOX_DOORBELL_TIMEOUT+5s (the adapter
-  # self-bounds each step at TIMEOUT); a wedged adapter reports unconfirmed.
+  # The wrapper's backstop is 4*LETTERBOX_DOORBELL_TIMEOUT + 5s + the Enter
+  # pause = 11s here (the adapter self-bounds each step at TIMEOUT); a wedged
+  # adapter reports unconfirmed. The bound keeps the original 3s of slack.
   [[ "$out" == *'reason=unconfirmed'* ]] || fail "D5-timeout-outcome: $out"
   [[ -n "$(find "$box/beta/inbox" -name '*hang-proof*.md' -print -quit)" ]] || fail D5-letter-lost
-  (( end - start < 12 )) || fail "D5-not-bounded: $((end - start))s"
+  (( end - start < 4 * 1 + 5 + 2 + 3 )) || fail "D5-not-bounded: $((end - start))s"
   pass D5-bounded-timeout
 else
   echo "SKIP: D5 bounded timeout (python3 unavailable)"
