@@ -176,7 +176,7 @@ For ownership replies the helper order is:
 
 A crash after publish but before archive can leave a duplicate-safe retry. Duplicates are safer than silent loss. Deduplicate by `id` and `re`.
 
-The doorbell is the last act, never the first. Doorbell success means a wake-up was submitted to a verified live surface — not that the agent read or handled the letter.
+The doorbell is the last act, never the first. Doorbell success (`submitted`) means the multiplexer accepted the doorbell text and its Enter for a verified live surface. It cannot prove that the agent's terminal app submitted the line, and never that the agent read or handled the letter.
 
 ## Handling rules
 
@@ -264,17 +264,23 @@ Rules:
 - `letterbox token <8hex>` resolves a doorbell token to `unhandled` / `already filed` / `unknown`.
 - A ring outcome is `submitted`, `pasted_not_submitted`, or `no_live_surface` — it never proves the letter was read or a turn started.
 - `priority: now` may ring a live surface; lower priorities are durable-only by default.
-- At-most-once notification over a durable at-least-once record. Each adapter step is bounded by `LETTERBOX_DOORBELL_TIMEOUT` (default 1s), with a helper backstop of 4 × step + 5s, so an unresponsive ring path cannot hang a sender; the letter is already durable.
+- At-most-once notification over a durable at-least-once record. Each adapter step is bounded by `LETTERBOX_DOORBELL_TIMEOUT` (default 1s), with a helper backstop of 4 × step + 5s + the Enter pause, so an unresponsive ring path cannot hang a sender; the letter is already durable.
 - Offline, busy, or unregistered agents still receive the letter in `inbox/`.
 
 Bounds budget (ring path). `LETTERBOX_DOORBELL_TIMEOUT` (default **1s**) bounds
 each mux call (liveness, notify, text, Enter). The longest legitimate run is
 3–4 steps (liveness + text + Enter, or a notify-only path) ≈ 4 × step. The
-wrapper's whole-run backstop is 4 × step + 5s spawn margin = **9s** at the
-default, which with ~1s of cleanup sits strictly inside the caller's 10s
-deadline. Configuration limit: keep `LETTERBOX_DOORBELL_TIMEOUT` at 1s (integer
+wrapper's whole-run backstop is 4 × step + 5s spawn margin + the Enter pause = **11s** at the defaults. A healthy ring takes about the pause plus
+one second. Agent Letter Bridge 0.5.2 and earlier allow the whole ring 10s, so there a
+ring that is already wedged reads as unconfirmed slightly early. Configuration limit: keep `LETTERBOX_DOORBELL_TIMEOUT` at 1s (integer
 seconds); raising it outruns the caller deadline unless this budget is
 re-derived.
+
+Enter pause. The adapter waits `LETTERBOX_DOORBELL_ENTER_DELAY` (default **2s**, whole
+seconds 0–5, 0 for no pause) between the doorbell text and its Enter; any other value
+is refused as `invalid_enter_delay` before a mux call. An agent terminal app that
+detects pastes treats an Enter sent with the text as part of the paste, and the line is
+never submitted.
 
 The Herdr adapter implements this contract for live terminal agents (live pane+socket registry first, optional static pane-id patterns as fallback; local Herdr only). The shared filesystem remains the universal transport.
 
