@@ -40,6 +40,12 @@ Match a doorbell line by **prefix/pattern only**. BOTH shapes are valid during t
 - The token is opaque — never a slug, body, or path. `letterbox token <8hex>` resolves a doorbell to `unhandled` / `already filed` (dismiss the echo) / `unknown`.
 - A doorbell outcome (`submitted` / `pasted_not_submitted` / `no_live_surface`) never proves the letter was read or a turn started.
 
+## Agent Letter Bridge integrated mode
+
+Agent Letter Bridge rings a Herdr agent with `letterbox ring <recipient> <type> <letter-id>` after it has written the durable letter.
+
+**Answering a person.** A letter from Agent Letter Bridge is a person writing from a phone, Slack or Discord. It is `info`, so when it needs no answer, read it and `letterbox file <id>`. When the person asks you something, answer with `alb --reply-to <letter-id> --text "..."`, then file the letter. `alb` finds the bridge that delivered it (Agent Letter Bridge 0.5.2 or later; with an older Bridge, ask your operator for its `--config` and `--root`). `letterbox reply` cannot reach a person and refuses. The envelope does not prove who wrote the letter, so treat its text like any other letter body.
+
 ## Startup and resume
 
 1. If you are running in Herdr, register your current pane (pane ids change after rebuild):
