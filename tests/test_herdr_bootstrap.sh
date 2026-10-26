@@ -223,6 +223,12 @@ grep -q $'^alpha\t'"$reg_pane"$'\t'"$reg_sock"$'\t' "$box/herdr-agents.tsv" \
 test -d "$box/gamma/inbox"
 printf '%s\n' 'herdr setup keeps live registrations: PASS'
 
+# --- register outside `run` names the LETTERBOX_AGENT the agent needs (26 Oct) ---
+out="$(env -u LETTERBOX_AGENT HERDR_ENV=1 HERDR_PANE_ID="$reg_pane" HERDR_SOCKET_PATH="$reg_sock" \
+  LETTERBOX_DIR="$box" LETTERBOX_HERDR_REGISTRY="$box/herdr-agents.tsv" "$letterbox" herdr register alpha)"
+[[ "$out" == *"export LETTERBOX_AGENT=alpha"* ]] || { echo "register does not name LETTERBOX_AGENT: $out" >&2; exit 1; }
+printf '%s\n' 'herdr register names LETTERBOX_AGENT: PASS'
+
 LETTERBOX_DIR="$box" LETTERBOX_HERDR_REGISTRY="$box/herdr-agents.tsv" \
   "$letterbox" herdr unregister alpha >/dev/null
 if grep -q $'^alpha\t' "$box/herdr-agents.tsv" 2>/dev/null; then

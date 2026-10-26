@@ -348,6 +348,10 @@ cmd_herdr_register() {
   mv "$tmp" "$registry"
   release_lifecycle_lock
   printf 'registered: %s → %s (socket %s)\n' "$agent" "$pane" "$socket"
+  # The registry names the pane for the doorbell. The agent's own commands
+  # (check, file, reply) still need its name; `herdr run` exports it.
+  [[ "${LETTERBOX_AGENT:-}" == "$agent" ]] ||
+    printf 'Commands from this agent need its name: export LETTERBOX_AGENT=%s\n' "$agent"
 }
 
 cmd_herdr_status() {

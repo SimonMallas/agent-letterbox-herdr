@@ -9,9 +9,11 @@ bin_dir="${AGENT_LETTERBOX_BIN_DIR:-$HOME/.local/bin}"
 fail() { printf 'agent-letterbox-herdr installer: %s\n' "$*" >&2; exit 1; }
 command -v git >/dev/null 2>&1 || fail 'Git is required. Install Git, then run this command again.'
 if [[ -e "$install_dir" && ! -d "$install_dir/.git" ]]; then fail "$install_dir exists but is not an Agent Letterbox Git checkout"; fi
+updated=false
 if [[ -d "$install_dir/.git" ]]; then
   printf 'Updating Agent Letterbox for Herdr in %s\n' "$install_dir"
   git -C "$install_dir" pull --ff-only
+  updated=true
 else
   printf 'Downloading Agent Letterbox for Herdr...\n'
   mkdir -p "$(dirname "$install_dir")"
@@ -26,6 +28,13 @@ else
   ln -s "$target" "$launcher"
 fi
 chmod +x "$install_dir/bin/letterbox" "$install_dir/adapters"/*.sh "$install_dir/tests"/*.sh
+# An update changes the code only. The first-time setup below is shared by the
+# whole team, so an update must not present it as the next step.
+if [[ "$updated" == true ]]; then
+  printf '\nUpdated Agent Letterbox for Herdr to %s.\n' "$(<"$install_dir/VERSION")"
+  printf 'Your Letterbox, agents and registrations are unchanged. There is nothing more to run.\n'
+  exit 0
+fi
 printf '\nInstalled Agent Letterbox for Herdr.\n'
 printf 'Next run:\n\n  letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells\n\n'
 printf 'If `letterbox` is not found, add %s to your PATH.\n' "$bin_dir"

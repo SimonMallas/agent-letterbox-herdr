@@ -303,6 +303,8 @@ letterbox herdr register planner
 letterbox herdr status
 ```
 
+`register` names the pane for the doorbell only. If the agent in it was not started with `herdr run`, it also needs `LETTERBOX_AGENT=planner` where its commands run; `register` prints that line.
+
 ## Send a live handoff (ack, then result)
 
 ```bash
