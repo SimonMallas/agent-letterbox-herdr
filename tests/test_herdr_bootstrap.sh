@@ -213,6 +213,16 @@ except Exception:
 fi
 printf '%s\n' 'registry-first live doorbell: PASS'
 
+# --- setup again to add an agent keeps the running ones (26 Oct) ---
+printf 'ghost\tw9:p9\t%s\t2026-01-01T00:00:00Z\n' "$tmp/no-such.sock" >> "$box/herdr-agents.tsv"
+HOME="$tmp/home" LETTERBOX_BIN_DIR="$tmp/bin" LETTERBOX_SKILLS_DIR="$tmp/skills" \
+  "$letterbox" herdr setup --agents gamma --dir "$box" --automatic-doorbells >/dev/null
+grep -q $'^alpha\t'"$reg_pane"$'\t'"$reg_sock"$'\t' "$box/herdr-agents.tsv" \
+  || { echo 'setup dropped a live registration' >&2; cat "$box/herdr-agents.tsv" >&2; exit 1; }
+! grep -q '^ghost' "$box/herdr-agents.tsv" || { echo 'setup kept a dead registration' >&2; exit 1; }
+test -d "$box/gamma/inbox"
+printf '%s\n' 'herdr setup keeps live registrations: PASS'
+
 LETTERBOX_DIR="$box" LETTERBOX_HERDR_REGISTRY="$box/herdr-agents.tsv" \
   "$letterbox" herdr unregister alpha >/dev/null
 if grep -q $'^alpha\t' "$box/herdr-agents.tsv" 2>/dev/null; then

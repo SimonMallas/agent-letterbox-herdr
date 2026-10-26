@@ -306,6 +306,22 @@ herdr_pane_live() {
   fi
 }
 
+# Setup runs again whenever an agent is added. Emptying the registry then
+# silenced every agent already running until each one registered again, so
+# keep the rows whose pane is still live and drop only the dead ones.
+keep_live_herdr_registrations() {
+  local registry="$1" tmp line pane socket
+  [[ -f "$registry" ]] || { : > "$registry"; return; }
+  tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    pane="$(printf '%s\n' "$line" | cut -f2)"
+    socket="$(printf '%s\n' "$line" | cut -f3)"
+    [[ -n "$pane" ]] && herdr_pane_live "$pane" "$socket" || continue
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$registry"
+  mv "$tmp" "$registry"
+}
+
 cmd_herdr_register() {
   local agent="${1:?usage: letterbox herdr register <agent>}" registry pane socket tmp owner
   need_agent "$agent"
@@ -401,7 +417,7 @@ cmd_herdr_setup() {
   mkdir -p "$BOX" "$BOX/locks" "$(dirname "$DEFAULT_DIR_FILE")" "$launcher_dir"
   cmd_init "${agent_list[@]}" >/dev/null
   printf '%s\n' "$BOX" > "$DEFAULT_DIR_FILE"
-  : > "$BOX/herdr-agents.tsv"
+  keep_live_herdr_registrations "$BOX/herdr-agents.tsv"
   if [[ ! -f "$BOX/herdr-patterns.tsv" ]]; then
     cat > "$BOX/herdr-patterns.tsv" <<'PAT'
 # Optional static fallback: agent<TAB>herdr_pane_id

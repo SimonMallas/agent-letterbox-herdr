@@ -236,6 +236,8 @@ To update later, run the same installer again:
 curl -fsSL https://raw.githubusercontent.com/SimonMallas/agent-letterbox-herdr/main/install.sh | bash
 ```
 
+To add an agent later, run setup again with just its name, for example `letterbox herdr setup --agents tester --automatic-doorbells`. Agents that are already running keep their doorbells; only registrations whose pane has closed are cleared.
+
 ### Option B — Manual Git install
 
 ```bash
