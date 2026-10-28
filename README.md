@@ -230,7 +230,7 @@ letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-d
 source "$HOME/.agent-letterbox/env.sh"
 ```
 
-To update later, run the same installer again:
+To update later, run the same installer again (more in [Updating](#updating)):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SimonMallas/agent-letterbox-herdr/main/install.sh | bash
@@ -339,6 +339,24 @@ Only `nack` or final `result` moves the original letter to `processed/`.
 > `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only. Without it, the adapter prefers a notification toast over terminal input.
 
 > Before pressing Enter, Letterbox waits `LETTERBOX_DOORBELL_ENTER_DELAY` seconds (default 2, whole seconds 0–5), because some agent apps treat an Enter sent together with the text as part of a paste and never submit it. If your agent's doorbell sits typed but unsent, raise it; if your agent never needs the pause, set it to 0.
+
+## Updating
+
+`letterbox --version` shows the version you have, and [CHANGELOG.md](CHANGELOG.md) says what each version changed. Every agent runs the same `letterbox`, so one update covers the whole team. Your Letterbox, letters, agents and registrations are kept, and running agents use the new version from their next `letterbox` command.
+
+**Installed with the installer (Option A):** run it again:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SimonMallas/agent-letterbox-herdr/main/install.sh | bash
+```
+
+It says which version you now have. You don't need to run setup again: if your team was set up before v0.6.4, the update also adds the Agent Letterbox skill link that setup has made since then.
+
+**Installed with Git (Option B):** run `git pull` in the folder you cloned. If your team was set up before v0.6.4, run setup once more the way you add an agent (with `--dir` if you used it): it adds the Agent Letterbox skill link and keeps everything else.
+
+**Added only the skill with `npx skills add`:** run `npx skills update`.
+
+**Installed the Herdr plugin:** run `herdr plugin update agent-letterbox` (Herdr 0.9.4 or newer).
 
 ## Using a pre-release checkout
 
