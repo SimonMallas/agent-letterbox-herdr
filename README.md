@@ -194,7 +194,7 @@ reviewer. The thinking in full:
 
 ## What you need
 
-- Bash, Git, and **Herdr 0.7+** (`herdr --version`)
+- Bash, Git, and **Herdr 0.7+** (`herdr --version`); Herdr 0.9.1+ adds the doorbell's check of what is in front of the pane
 - A running local Herdr session (`herdr` started; local socket only)
 - Agents you already run in terminals (any coding-agent CLI you already use)
 
@@ -336,7 +336,7 @@ printf '%s\n' 'RESULT: no critical issues; two nits in findings.md.' |
 
 Only `nack` or final `result` moves the original letter to `processed/`.
 
-> `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only. Without it, the adapter prefers a notification toast over terminal input.
+> `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only. On Herdr 0.9.1 or newer it refuses a shell at its prompt or an agent waiting at a question, as Herdr reports them when it checks; with an older Herdr it types as before, without that check. Without it, the adapter prefers a notification toast over terminal input.
 
 > Before pressing Enter, Letterbox waits `LETTERBOX_DOORBELL_ENTER_DELAY` seconds (default 2, whole seconds 0–5), because some agent apps treat an Enter sent together with the text as part of a paste and never submit it. If your agent's doorbell sits typed but unsent, raise it; if your agent never needs the pause, set it to 0.
 

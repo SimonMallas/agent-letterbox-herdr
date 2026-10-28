@@ -19,6 +19,13 @@ trap 'rm -rf "$work"' EXIT
 mock="$work/herdr-mock"
 cat > "$mock" <<'MOCK'
 #!/usr/bin/env bash
+# Herdr 0.9.1's answers to the shell guard's read-only questions (not logged):
+# no recognised agent, and an app, not a shell, in front.
+case "${1:-} ${2:-}" in
+  "status server") echo '{"running":true,"version":"0.9.1"}'; exit 0;;
+  "agent get") echo '{"error":{"code":"agent_not_found"}}' >&2; exit 1;;
+  "pane process-info") echo '{"result":{"process_info":{"shell_pid":1,"foreground_process_group_id":2}}}'; exit 0;;
+esac
 echo "$*" >> "$MOCK_LOG"
 if [[ "$1" == "pane" && "$2" == "get" ]]; then exit 0; fi
 exit 0

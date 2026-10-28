@@ -556,6 +556,23 @@ cmd_init() {
   printf 'initialized letterbox: %s\n' "$BOX"
 }
 
+# A doorbell that cannot check what is in front of the agent's pane types
+# nothing (adapters/herdr.sh), so check says so instead of leaving it silent.
+shell_guard_note() { # $1=agent
+  [[ -n "${LETTERBOX_DOORBELL:-}" && -x "$LETTERBOX_DOORBELL" ]] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  # Only the bundled Herdr adapter knows --shell-guard. A custom adapter could
+  # take it for a recipient and ring, and check never rings.
+  local doorbell bundled
+  doorbell="$(cd "$(dirname "$LETTERBOX_DOORBELL")" 2>/dev/null && pwd -P)/$(basename "$LETTERBOX_DOORBELL")"
+  bundled="$(cd "$SCRIPT_DIR/../adapters" 2>/dev/null && pwd -P)/herdr.sh"
+  [[ "$doorbell" == "$bundled" ]] || return 0
+  local t="${LETTERBOX_DOORBELL_TIMEOUT:-1}" out
+  [[ "$t" =~ ^[0-9]+$ ]] || t=1
+  out="$(bounded_cmd "$((3 * t + 5))" "$LETTERBOX_DOORBELL" --shell-guard "$1" 2>/dev/null)" || true
+  printf '%s\n' "$out" | grep -m 1 '^shell-guard: unavailable' || true
+}
+
 ring_doorbell() {
   local to="$1" type="$2" slug="$3" id="${4:-}" token="" rc=0
   # The wrapper is the SOLE stdout owner for doorbell-outcome v=1: the
@@ -575,8 +592,9 @@ ring_doorbell() {
   local child_out
   # Best-effort: the letter is already durable. The adapter self-bounds each
   # step at LETTERBOX_DOORBELL_TIMEOUT; the wrapper bound is only a backstop
-  # for a wedged adapter, so it covers a whole run (lookup + liveness + two
-  # inject steps + startup slack), never a single step.
+  # for a wedged adapter, so it covers a whole run (liveness + the shell
+  # guard's version, occupant and two front checks + two inject steps +
+  # startup slack), never a single step.
   local t="${LETTERBOX_DOORBELL_TIMEOUT:-1}"
   # At most three digits, read as base 10: "08" is not octal, and a long value
   # cannot overflow the budget. The adapter itself refuses anything outside 1-999.
@@ -592,7 +610,7 @@ ring_doorbell() {
     emit_outcome no_live_surface adapter_unavailable -
     return 0
   fi
-  child_out="$(bounded_cmd "$((4 * t + 5 + d))" env LETTERBOX_DOORBELL_FROM="$from" "$LETTERBOX_DOORBELL" "$to" "$type" "$slug" "$token")" || rc=$?
+  child_out="$(bounded_cmd "$((7 * t + 5 + d))" env LETTERBOX_DOORBELL_FROM="$from" "$LETTERBOX_DOORBELL" "$to" "$type" "$slug" "$token")" || rc=$?
   # A wrapper-level kill (rc 124) proves nothing about injection: unconfirmed.
   report_doorbell_outcome "$child_out" "$rc"
   return 0
@@ -1073,6 +1091,7 @@ cmd_check() {
   done
   local days="${LETTERBOX_CHECK_STALE_DAYS:-14}"
   printf '%s\n' "── $who inbox: $n message(s)  open: $live_n live · $stale_n stale (>${days}d)"
+  shell_guard_note "$who"
   if (( live_n > 0 )); then
     printf '%s\n' "${live_rows[@]}" | sort -t'|' -k1,1nr | while IFS='|' read -r ep f age; do
       print_letter_card "$f" 0 "$age"

@@ -1,13 +1,14 @@
 # Herdr adapter guide
 
-Local-only automatic doorbells for Agent Letterbox using the Herdr pane get / send-text / send-keys CLI. The plugin minimum remains Herdr 0.9.1. Native bootstrap and plugin suites have been verified on macOS ARM64 with Herdr 0.9.1 and 0.9.5; CI covers both versions with checksum-verified binaries on Linux and macOS.
+Local-only automatic doorbells for Agent Letterbox using the Herdr CLI. The plugin, and the doorbell's check of what is in front of the pane, need Herdr 0.9.1 or newer. Native bootstrap and plugin suites have been verified on macOS ARM64 with Herdr 0.9.1 and 0.9.5; CI covers both versions with checksum-verified binaries on Linux and macOS.
 
 The isolated test launchers set a 24×80 PTY grid: Herdr 0.9.5 refuses a zero-sized terminal. They retain a bounded 8 KiB output tail for startup failures. This is a test-harness requirement, not a change to the doorbell protocol. Remote-machine doorbells remain out of scope.
 
 ```text
 letter written to inbox
 → adapters/herdr.sh finds a live registered pane (registry-first)
-→ herdr pane send-text + pane send-keys enter  (when SUBMIT=1)
+→ checks what is in front of the pane, refuses a shell at its prompt  (when SUBMIT=1)
+→ herdr agent prompt, or pane send-text + pane send-keys enter
 → agent checks its durable inbox
 ```
 
@@ -39,12 +40,11 @@ export LETTERBOX_HERDR_SUBMIT=1
 
 Setup flag `--automatic-doorbells` (alias `--submit`) turns this on in the generated environment.
 
-Injection uses:
+Before typing anything, the adapter checks what is in front of the pane (Herdr 0.9.1 or newer):
 
-```bash
-herdr pane send-text <pane-id> '<doorbell>'
-herdr pane send-keys <pane-id> enter
-```
+- A coding agent Herdr recognises (`herdr agent get`) gets the doorbell through `herdr agent prompt <pane-id> '<doorbell>'`: text and Enter in one submission, only while that agent is the pane's foreground process. An agent waiting at an approval or question is refused as `agent_blocked`, so the doorbell does not answer it.
+- Anything else is checked with `herdr pane process-info --pane <pane-id>`. A shell at its own prompt owns the pane's foreground process group and is refused as `shell_foreground`: the doorbell line would run as a command. Any other app gets `herdr pane send-text <pane-id> '<doorbell>'` and, after the pause, `herdr pane send-keys <pane-id> enter`, but only if it is still in front.
+- With a Herdr older than 0.9.1, or when Herdr cannot say what is in front, the doorbell is typed as before, without the check, and `letterbox check` prints `shell-guard: unavailable`.
 
 (with `HERDR_SOCKET_PATH` set from the registry row when present)
 
@@ -54,6 +54,7 @@ The doorbell line keeps the v0.2 byte-prefix; v0.3 may append an opaque token (`
 
 - Doorbell text is generic; no task body, paths, or secrets.
 - `LETTERBOX_HERDR_SUBMIT=1` injects into a live agent TUI — dedicated panes only.
+- On Herdr 0.9.1 or newer, a doorbell is refused when Herdr reports a shell at its prompt or an agent waiting at a question. It is a check, not a lock: what is in front can change between the check and the typing.
 - Without SUBMIT, adapter attempts a Herdr notification toast only (not a terminal inject).
 - Doorbell success means a wake-up was submitted to a verified live target — not that the agent read or handled the letter.
 - If a safe live target cannot be verified, Letterbox prefers silent durable delivery over risky pane injection.

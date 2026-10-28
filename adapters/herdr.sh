@@ -9,14 +9,23 @@
 #   2) LETTERBOX_HERDR_PATTERNS (static fallback)
 #      agent<TAB>pane_id
 #
-# Submit is opt-in: LETTERBOX_HERDR_SUBMIT=1 sends text + enter into the pane.
-# Uses Herdr 0.9.0 CLI (pane get / send-text / send-keys; live ring verified 2026-09-09)
+# Submit is opt-in: LETTERBOX_HERDR_SUBMIT=1 sends text + enter into the pane,
+# after the shell-foreground guard below on Herdr 0.9.1+.
+# Uses Herdr 0.9.1 CLI (pane get / process-info / send-text / send-keys,
+# agent get / prompt, status server; guard verified live 2026-10-28)
 #
 # Arguments: recipient message-type slug [doorbell-token]
+#        or: --shell-guard recipient (for letterbox check; prints one line)
 # The optional v0.3 token (8 lowercase hex, derived from the letter id by the
 # helper) is appended to the doorbell line after the v0.2 tail — additive, so
 # the v0.2 byte-prefix is preserved.
 set -uo pipefail
+
+probe=false
+if [[ "${1:-}" == --shell-guard ]]; then
+  probe=true
+  set -- "${2:?recipient}" probe probe
+fi
 
 to="${1:?recipient}"
 type="${2:?type}"
@@ -130,6 +139,58 @@ run_herdr() {
   fi
 }
 
+# Shell-foreground guard: a doorbell typed into a shell at its prompt runs as
+# a command. Herdr 0.9.1+ knows which agent occupies a pane (agent get) and
+# submits text with Enter only while that agent is the pane's foreground
+# process, refusing one blocked at an approval or question (agent prompt).
+# For anything else, pane process-info tells a shell at its prompt (it owns
+# the foreground process group) from an app. Below 0.9.1, or when Herdr
+# cannot say, the doorbell is typed as before, without the check, the way
+# every edition types it; letterbox check says the check is off.
+herdr_says() { # $1=question; reads one Herdr reply on stdin, prints the answer or nothing
+  python3 -c '
+import json, re, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+result, error = d.get("result") or {}, d.get("error") or {}
+question = sys.argv[1]
+if question == "floor":
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)([-+].*)?", str(d.get("version", "")))
+    print("yes" if m and tuple(map(int, m.groups()[:3])) >= (0, 9, 1) else "no")
+elif question == "occupant":
+    if result.get("type") == "agent_info":
+        print("agent")
+    elif error.get("code") == "agent_not_found":
+        print("none")
+elif question == "front":
+    info = result.get("process_info") or {}
+    shell, group = info.get("shell_pid"), info.get("foreground_process_group_id")
+    if type(shell) is int and type(group) is int:
+        print("shell" if group == shell else "app")
+elif question == "error":
+    print(error.get("code", ""))
+' "$1"
+}
+
+# 0 = Herdr 0.9.1+, 1 = older or cannot say, 124 = timed out.
+guard_floor_met() {
+  local out ec=0
+  out="$(run_herdr status server --json 2>/dev/null)" || ec=$?
+  [[ "$ec" -eq 124 ]] && return 124
+  [[ "$(printf '%s' "$out" | herdr_says floor)" == yes ]]
+}
+
+# Prints shell or app, or nothing when Herdr cannot say; 124 = timed out.
+pane_front() {
+  local out ec=0
+  out="$(run_herdr pane process-info --pane "$pane_id" 2>/dev/null)" || ec=$?
+  [[ "$ec" -eq 124 ]] && return 124
+  [[ "$ec" -eq 0 ]] && printf '%s' "$out" | herdr_says front
+  return 0
+}
+
 pane_id=''
 socket=''
 
@@ -182,8 +243,58 @@ fi
 
 [[ -n "$pane_id" ]] || { emit_outcome no_live_surface surface_not_found -; exit 0; }
 
+if [[ "$probe" == true ]]; then
+  # For letterbox check: only a typing doorbell needs the guard.
+  [[ "${LETTERBOX_HERDR_SUBMIT:-0}" == 1 ]] || exit 0
+  if guard_floor_met; then
+    printf 'shell-guard: available\n'
+  else
+    printf 'shell-guard: unavailable (Herdr 0.9.1 or newer checks what is in front before typing; doorbells are typed without that check)\n'
+  fi
+  exit 0
+fi
+
 # Input injection is explicit opt-in: Enter can submit unrelated buffer text.
 if [[ "${LETTERBOX_HERDR_SUBMIT:-0}" == 1 ]]; then
+  floor_ec=0
+  guard_floor_met || floor_ec=$?
+  [[ "$floor_ec" -eq 124 ]] && { emit_outcome no_live_surface helper_timeout -; exit 0; }
+  guarded=false
+  [[ "$floor_ec" -eq 0 ]] && guarded=true
+
+  occupant=''
+  if [[ "$guarded" == true ]]; then
+    get_ec=0
+    got="$(run_herdr agent get "$pane_id" 2>&1)" || get_ec=$?
+    [[ "$get_ec" -eq 124 ]] && { emit_outcome no_live_surface helper_timeout -; exit 0; }
+    occupant="$(printf '%s' "$got" | herdr_says occupant)"
+  fi
+  if [[ "$occupant" == agent ]]; then
+    # Text and Enter in one submission: no pause, so no gap to race.
+    prompt_ec=0
+    said="$(run_herdr agent prompt "$pane_id" "$line" 2>&1)" || prompt_ec=$?
+    if [[ "$prompt_ec" -eq 0 ]]; then
+      emit_outcome submitted - "$pane_id"
+    elif [[ "$prompt_ec" -eq 124 ]]; then
+      # The submission started; it may or may not have landed.
+      emit_outcome no_live_surface unconfirmed -
+    else
+      code="$(printf '%s' "$said" | herdr_says error)"
+      case "$code" in
+        agent_blocked|agent_not_ready|agent_not_found) emit_outcome no_live_surface "$code" -;;
+        *) emit_outcome no_live_surface send_failed -;;
+      esac
+    fi
+    exit 0
+  fi
+
+  if [[ "$guarded" == true ]]; then
+    front_ec=0
+    front="$(pane_front)" || front_ec=$?
+    [[ "$front_ec" -eq 124 ]] && { emit_outcome no_live_surface helper_timeout -; exit 0; }
+    [[ "$front" == shell ]] && { emit_outcome no_live_surface shell_foreground -; exit 0; }
+  fi
+
   send_ec=0
   run_herdr pane send-text "$pane_id" "$line" >/dev/null || send_ec=$?
   if [[ "$send_ec" -ne 0 ]]; then
@@ -196,6 +307,12 @@ if [[ "${LETTERBOX_HERDR_SUBMIT:-0}" == 1 ]]; then
     exit 0
   fi
   sleep "$enter_delay"
+  # The app may have exited during the pause: no Enter for a shell that would
+  # run the line.
+  if [[ "$guarded" == true ]]; then
+    front="$(pane_front)" || front=''
+    [[ "$front" == shell ]] && { emit_outcome pasted_not_submitted - "$pane_id"; exit 0; }
+  fi
   enter_ec=0
   run_herdr pane send-keys "$pane_id" enter >/dev/null || enter_ec=$?
   if [[ "$enter_ec" -ne 0 ]]; then

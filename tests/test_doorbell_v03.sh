@@ -91,6 +91,13 @@ MOCK_LOG="$box/herdr.log"
 : > "$MOCK_LOG"
 cat > "$box/herdr-mock" <<'SH'
 #!/usr/bin/env bash
+# Herdr 0.9.1's answers to the shell guard's read-only questions (not logged):
+# no recognised agent, and an app, not a shell, in front.
+case "${1:-} ${2:-}" in
+  "status server") echo '{"running":true,"version":"0.9.1"}'; exit 0;;
+  "agent get") echo '{"error":{"code":"agent_not_found"}}' >&2; exit 1;;
+  "pane process-info") echo '{"result":{"process_info":{"shell_pid":1,"foreground_process_group_id":2}}}'; exit 0;;
+esac
 echo "$*" >> "$MOCK_LOG"
 if [[ "$1" == "pane" && "$2" == "get" ]]; then exit 0; fi
 if [[ "${MOCK_SEND_TEXT_FAIL:-0}" == 1 && "$1 $2" == "pane send-text" ]]; then exit 1; fi
@@ -255,7 +262,10 @@ SH
   # adapter reports unconfirmed. The bound keeps the original 3s of slack.
   [[ "$out" == *'reason=unconfirmed'* ]] || fail "D5-timeout-outcome: $out"
   [[ -n "$(find "$box/beta/inbox" -name '*hang-proof*.md' -print -quit)" ]] || fail D5-letter-lost
-  (( end - start < 4 * 1 + 5 + 2 + 3 )) || fail "D5-not-bounded: $((end - start))s"
+  # The wrapper's whole-run bound: 7 steps at the 1s step timeout (the shell
+  # guard added version, occupant and two front checks), 5s slack, the 2s
+  # Enter pause, plus 3s for this test's own overhead.
+  (( end - start < 7 * 1 + 5 + 2 + 3 )) || fail "D5-not-bounded: $((end - start))s"
   pass D5-bounded-timeout
 else
   echo "SKIP: D5 bounded timeout (python3 unavailable)"

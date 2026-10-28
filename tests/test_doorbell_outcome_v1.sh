@@ -20,6 +20,13 @@ export LETTERBOX_DOORBELL_TIMEOUT=3
 # Fake herdr (behavior by env) -------------------------------------------------
 cat > "$ROOT/bin/herdr" <<'HERDR'
 #!/usr/bin/env bash
+# Herdr 0.9.1's answers to the shell guard's read-only questions (not logged):
+# no recognised agent, and an app, not a shell, in front.
+case "${1:-} ${2:-}" in
+  "status server") echo '{"running":true,"version":"0.9.1"}'; exit 0;;
+  "agent get") echo '{"error":{"code":"agent_not_found"}}' >&2; exit 1;;
+  "pane process-info") echo '{"result":{"process_info":{"shell_pid":1,"foreground_process_group_id":2}}}'; exit 0;;
+esac
 set -uo pipefail
 log="${HERDR_FAKE_LOG:?}"
 printf '%s\n' "$*" >> "$log"

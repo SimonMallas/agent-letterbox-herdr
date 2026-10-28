@@ -27,7 +27,19 @@ case "$ED" in
     run_env=(ZELLIJ_BIN_PATH="$work/bin/zellij" LETTERBOX_ZELLIJ_PATTERNS="$work/box/zellij-patterns.tsv" LETTERBOX_ZELLIJ_SUBMIT=1)
     text_re=' action write-chars '; enter_re=' action write --pane-id .* 13$' ;;
   herdr)
-    printf '#!/usr/bin/env bash\n%s\nexit 0\n' "$stamp" > "$work/bin/herdr"
+    {
+      printf '#!/usr/bin/env bash\n'
+      cat <<'G'
+# Herdr 0.9.1's answers to the shell guard's read-only questions (not logged):
+# no recognised agent, and an app, not a shell, in front.
+case "${1:-} ${2:-}" in
+  "status server") echo '{"running":true,"version":"0.9.1"}'; exit 0;;
+  "agent get") echo '{"error":{"code":"agent_not_found"}}' >&2; exit 1;;
+  "pane process-info") echo '{"result":{"process_info":{"shell_pid":1,"foreground_process_group_id":2}}}'; exit 0;;
+esac
+G
+      printf '%s\nexit 0\n' "$stamp"
+    } > "$work/bin/herdr"
     chmod +x "$work/bin/herdr"
     printf 'reviewer\t%%1\n' > "$work/box/herdr-patterns.tsv"
     run_env=(HERDR_BIN_PATH="$work/bin/herdr" LETTERBOX_HERDR_PATTERNS="$work/box/herdr-patterns.tsv" LETTERBOX_HERDR_SUBMIT=1)

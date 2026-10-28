@@ -17,6 +17,13 @@ printf 'agent\tpane:7\t/tmp/fake.sock\t2026-09-27T00:00:00Z\n' > "$ROOT/registry
 
 cat > "$ROOT/bin/herdr" <<'HERDR'
 #!/usr/bin/env bash
+# Herdr 0.9.1's answers to the shell guard's read-only questions (not logged):
+# no recognised agent, and an app, not a shell, in front.
+case "${1:-} ${2:-}" in
+  "status server") echo '{"running":true,"version":"0.9.1"}'; exit 0;;
+  "agent get") echo '{"error":{"code":"agent_not_found"}}' >&2; exit 1;;
+  "pane process-info") echo '{"result":{"process_info":{"shell_pid":1,"foreground_process_group_id":2}}}'; exit 0;;
+esac
 printf '%s\n' "$*" >> "${HERDR_FAKE_LOG:?}"
 [[ "${1:-} ${2:-}" == "pane get" && "${HERDR_FAKE_GET:-ok}" == fail ]] && exit 1
 exit 0
