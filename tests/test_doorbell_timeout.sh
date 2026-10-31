@@ -41,9 +41,16 @@ adapter() { # [env assignments...]
   : > "$MOCK_LOG"
   env LETTERBOX_DIR="$work/box" "${run_env[@]}" "$@" "$EDITION/adapters/$ED.sh" reviewer info smoke 2>/dev/null
 }
+line="📬 letterbox doorbell: unacked info in $work/box/reviewer/inbox/ — please check"
+
 for v in '' 1 3 999; do
   out="$(adapter LETTERBOX_DOORBELL_ENTER_DELAY=0 ${v:+LETTERBOX_DOORBELL_TIMEOUT="$v"})"
   [[ "$out" == *"outcome=submitted"* ]] || bad "timeout '${v:-default}' still rings ($out)"
+  # The call log, not just the outcome line: the doorbell typed once, exactly,
+  # and one Enter.
+  [[ "$(grep -cE "$text_re" "$MOCK_LOG")" == 1 && "$(grep -E "$text_re" "$MOCK_LOG")" == *" $line" ]] \
+    || bad "timeout '${v:-default}' types the doorbell line once"
+  [[ "$(grep -cE "$enter_re" "$MOCK_LOG")" == 1 ]] || bad "timeout '${v:-default}' presses Enter once"
 done
 ok "the default and whole seconds 1-999 ring as before"
 
@@ -54,5 +61,26 @@ for v in x 0 -1 1.5 1000 nan inf '1 '; do
   [[ ! -s "$MOCK_LOG" ]] || bad "invalid timeout '$v' runs no $ED command"
 done
 ok "invalid timeouts are refused before any $ED command"
+
+# Through the public `letterbox ring` too. Its own budget arithmetic must not
+# trip on a value the adapter refuses: "08" is not octal, and a long value must
+# not overflow.
+ID="2026-10-31T170000-chat-bridge-info-q-0a1b2c3d"
+printf -- '---\nid: %s\nfrom: chat-bridge\nto: reviewer\ntype: info\n---\nq\n' "$ID" > "$work/box/reviewer/inbox/$ID.md"
+ring() { # [env assignments...]
+  : > "$MOCK_LOG"
+  env LETTERBOX_DIR="$work/box" "${run_env[@]}" LETTERBOX_DOORBELL="$EDITION/adapters/$ED.sh" "$@" \
+    "$EDITION/bin/letterbox" ring reviewer info "$ID" 2>"$work/ring.err"
+}
+for v in 08 099 9999999999999999999999999999999999999999; do
+  out="$(ring LETTERBOX_DOORBELL_TIMEOUT="$v")"
+  [[ "$out" == "doorbell-outcome v=1 outcome=no_live_surface reason=invalid_timeout target=-" ]] \
+    || bad "ring refuses timeout '$v' ($out)"
+  [[ ! -s "$work/ring.err" ]] || bad "ring with timeout '$v' prints no error ($(cat "$work/ring.err"))"
+  [[ ! -s "$MOCK_LOG" ]] || bad "ring with timeout '$v' runs no $ED command"
+done
+out="$(ring LETTERBOX_DOORBELL_ENTER_DELAY=0)"
+[[ "$out" == *"outcome=submitted"* ]] || bad "ring with the default timeout still rings ($out)"
+ok "the public ring refuses them too, with no arithmetic error"
 
 printf 'doorbell timeout suite: PASS (%s)\n' "$pass"

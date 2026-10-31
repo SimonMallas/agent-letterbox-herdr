@@ -7,7 +7,7 @@ All notable changes to Agent Letterbox for Herdr are documented here.
 - An update by the installer now adds the Agent Letterbox skill link that setup has made since v0.6.4, so a team set up earlier gets it without running setup again. The link is made only where setup would make it, and anything already there is left alone.
 - The README has an Updating section: how to check your version, and how to update an installer, Git or `npx skills` install.
 - Setup's messages and the startup note (`AGENT-LETTERBOX.md`) no longer name one agent app for the extra skill link. Setup and an update print `Agent Letterbox skill also linked: <path>`.
-- A doorbell timeout (`LETTERBOX_DOORBELL_TIMEOUT`) that is not whole seconds from 1 to 999 is now refused as `invalid_timeout` before any Herdr command. A value such as `x` used to crash the step's time limit after the Herdr command had started, so the pane lookup ran with no limit and the ring reported `surface_not_found`. Nothing was typed.
+- A doorbell timeout (`LETTERBOX_DOORBELL_TIMEOUT`) that is not whole seconds from 1 to 999 is now refused as `invalid_timeout` before any Herdr command. A value such as `x` used to crash the step's time limit after the Herdr command had started, so the pane lookup ran with no limit and the ring reported `surface_not_found`. Nothing was typed. `letterbox ring` reports such a value the same way; before, a value such as `08` broke its own budget arithmetic and the ring reported `unconfirmed`.
 
 ## v0.6.4 — 2026-10-26 (Herdr edition)
 

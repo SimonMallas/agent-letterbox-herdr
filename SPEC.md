@@ -274,7 +274,7 @@ wrapper's whole-run backstop is 4 × step + 5s spawn margin + the Enter pause = 
 one second. Agent Letter Bridge 0.5.2 and earlier allow the whole ring 10s, so there a
 ring that is already wedged reads as unconfirmed slightly early. Configuration limit: keep `LETTERBOX_DOORBELL_TIMEOUT` at 1s (integer
 seconds); raising it outruns the caller deadline unless this budget is
-re-derived. A value that is not whole seconds from 1 to 999 is refused as `invalid_timeout` before any mux call.
+re-derived. Unset or empty means the default. Any other value must be whole seconds from 1 to 999 with no leading zero, or it is refused as `invalid_timeout` before any mux call, through `letterbox ring` as well.
 
 Enter pause. The adapter waits `LETTERBOX_DOORBELL_ENTER_DELAY` (default **2s**, whole
 seconds 0–5, 0 for no pause) between the doorbell text and its Enter; any other value
