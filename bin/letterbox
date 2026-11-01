@@ -1581,6 +1581,12 @@ cmd_token() { # glance-dismiss a doorbell token: unhandled / filed / unknown
   echo "unknown-token — no letter; ignore"
 }
 
+cmd_lint_notes() {
+  need_me
+  command -v python3 >/dev/null 2>&1 || die 'lint-notes requires python3'
+  python3 -I -B "$SCRIPT_DIR/../lib/query/lint_notes.py" --root "$BOX" --agent "$ME" "$@"
+}
+
 cmd_query() {
   command -v python3 >/dev/null 2>&1 || die 'query requires Python 3.9 or newer (python3)'
   python3 -I -B -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null \
@@ -1618,8 +1624,9 @@ case "${1:-}" in
   lock) shift; cmd_lock "$@";; unlock) shift; cmd_unlock "$@";;
   status) shift; cmd_status "$@";; herdr) shift; cmd_herdr "$@";;
   query) shift; cmd_query "$@";;
+  lint-notes) shift; cmd_lint_notes "$@";;
   *) printf '%s\n' \
-    'usage: letterbox {init|send|check|reply|file|done|progress|read|nudge|ring|token|query|lock|unlock|status|herdr|--version} ...' \
+    'usage: letterbox {init|send|check|reply|file|done|progress|read|nudge|ring|token|query|lint-notes|lock|unlock|status|herdr|--version} ...' \
     '' \
     'check [agent] [--recent|--thread <id>]   open work, live first, stale last (>14d silence); never prints bodies' \
     'read <id|display-id|token>              print the exact durable letter (own inbox only)' \

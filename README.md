@@ -106,6 +106,10 @@ Read the full comparison in [Why Letterbox?](docs/why-letterbox.md).
 Working an inbox day to day: [Handling mail](https://github.com/SimonMallas/agent-letterbox-cmux/blob/main/docs/handling-mail.md).
 The guide is edition-neutral and notes where platforms differ.
 
+Checking derived notes: [`letterbox lint-notes`](docs/lint-notes.md) checks
+citation references and formatting mechanically, never whether a citation
+supports a claim. Set `LETTERBOX_NOTES_DIR`; use `--json` or `--baseline`.
+
 
 ## More memory than message
 
