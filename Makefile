@@ -23,6 +23,9 @@ test:
 	python3 -B tests/test_query.py
 	python3 -B tests/test_writer_query.py
 	python3 -B tests/test_query_mutation.py
+	python3 -B tests/test_owed_view.py
+	python3 -B tests/test_notes_map.py
+	python3 -B tests/test_tidy_line.py
 	./tests/smoke.sh
 	./tests/test_outbox_sweep_exclusion.sh
 	./tests/test_error_paths.sh

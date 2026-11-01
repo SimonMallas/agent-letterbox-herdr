@@ -1038,8 +1038,71 @@ print_letter_card() { # $1=file $2=stale 0|1 $3=age — never prints the body
   print_progress_line "$f"
 }
 
+notes_map() { # [--summary]; LETTERBOX_NOTES_DIR unset: nothing to say
+  [[ -n "${LETTERBOX_NOTES_DIR:-}" ]] || return 0
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo 'map: needs Python 3.9 or newer (python3)'
+    return 0
+  fi
+  python3 -I -B "$SCRIPT_DIR/../lib/query/maps.py" --root "$BOX" --notes "$LETTERBOX_NOTES_DIR" "$@" || true
+}
+header_rows() { # "<key> ..." <file>...: one \037-separated row per letter, file first; closed headers only
+  local keys="$1"; shift
+  awk -v keys="$keys" '
+    BEGIN { nk = split(keys, k, " ") }
+    FNR == 1 { split("", v); open = 0 }
+    { line = $0; sub(/\r$/, "", line) }
+    FNR == 1 { open = (line == "---"); next }
+    open && line == "---" {
+      row = FILENAME
+      for (i = 1; i <= nk; i++) row = row "\037" v[k[i]]
+      print row
+      open = 0
+      next
+    }
+    open {
+      key = line; sub(/:.*/, "", key)
+      if (!(key in v)) { value = line; sub(/^[^:]*:[[:space:]]*/, "", value); v[key] = value }
+    }
+  ' "$@"
+}
+tidy_line() { # own inbox: one line once the count below reaches the threshold
+  local at="${LETTERBOX_CHECK_TIDY_AT:-5}" n=0 f id from typ req noun=letters
+  local outbox="$BOX/$ME/outbox"
+  local -a letters=() replies=()
+  [[ "$at" =~ ^[0-9]{1,6}$ ]] || at=5
+  at=$((10#$at))
+  (( at > 0 )) || return 0
+  shopt -s nullglob
+  letters=("$(inbox_path "$ME")"/*.md)
+  shopt -u nullglob
+  (( ${#letters[@]} >= at )) || return 0
+  # Counted = requires_ack false, and either from a mailbox here and not a
+  # request, or a phone letter (its sender has no mailbox here) whose reply is
+  # composed as <me>/outbox/reply-<id>.md. That phone letter is still owed on
+  # view=owed until filed.
+  # check can't see reading or delivery, so the line asks for a review.
+  while IFS=$'\037' read -r f id from typ req; do
+    [[ "$req" == false ]] || continue
+    if [[ "$from" != external-bridge && "$from" != locks && "$from" =~ ^[a-z][a-z0-9-]*$ ]] \
+       && [[ -e "$BOX/$from" || -L "$BOX/$from" ]]; then
+      if [[ "$typ" != request ]]; then n=$((n + 1)); fi
+    elif [[ "$id" =~ ^[A-Za-z0-9._:-]{1,243}$ && ! -L "$outbox" && -f "$outbox/reply-$id.md" && ! -L "$outbox/reply-$id.md" ]]; then
+      replies+=("$outbox/reply-$id.md")
+    fi
+  done < <(header_rows "id from type requires_ack" "${letters[@]}")
+  if (( ${#replies[@]} > 0 )); then
+    while IFS=$'\037' read -r f id; do
+      f="${f##*/reply-}"
+      if [[ "$id" == "${f%.md}" ]]; then n=$((n + 1)); fi
+    done < <(header_rows "re" "${replies[@]}")
+  fi
+  (( n >= at )) || return 0
+  (( n == 1 )) && noun=letter
+  printf '%s non-task %s to review for filing — letterbox file to tidy.\n' "$n" "$noun"
+}
 cmd_check() {
-  local who="" recent=false thread=""
+  local who="" recent=false thread="" maps=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --recent) recent=true;;
@@ -1048,9 +1111,10 @@ cmd_check() {
         thread="${2:?usage: letterbox check --thread <id>}"
         shift
         ;;
-      --*) die "unknown option: $1 (usage: letterbox check [agent] [--recent|--thread <id>])";;
+      --maps) maps=true;;
+      --*) die "unknown option: $1 (usage: letterbox check [agent] [--recent|--thread <id>|--maps])";;
       *)
-        [[ -z "$who" ]] || die "usage: letterbox check [agent] [--recent|--thread <id>]"
+        [[ -z "$who" ]] || die "usage: letterbox check [agent] [--recent|--thread <id>|--maps]"
         who="$1"
         ;;
     esac
@@ -1058,6 +1122,10 @@ cmd_check() {
   done
   if [[ -n "$thread" ]]; then
     check_thread "$thread"
+    return 0
+  fi
+  if [[ "$maps" == true ]]; then
+    notes_map
     return 0
   fi
   who="${who:-$ME}"
@@ -1113,6 +1181,11 @@ cmd_check() {
       printf 'letterbox: warning: orphan ACK sidecar %s\n' "$(safe_id_out "$oid")" >&2
     fi
   done
+  # Filing and notes are this seat's own: neither line when checking another inbox.
+  if [[ "$who" == "$ME" ]]; then
+    tidy_line
+    notes_map --summary
+  fi
   return 0
 }
 
@@ -1512,6 +1585,11 @@ cmd_query() {
   command -v python3 >/dev/null 2>&1 || die 'query requires Python 3.9 or newer (python3)'
   python3 -I -B -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null \
     || die 'query requires Python 3.9 or newer (python3)'
+  local arg
+  # Views (view=owed) are compat-v2 presets; strict v1 has none.
+  for arg in "$@"; do
+    [[ "$arg" == view=* && "${1:-}" != --compat-v2 ]] && { set -- --compat-v2 "$@"; break; }
+  done
   # Query must see the RAW configured root so its guards can validate it
   # (root_component_symlink). The prologue's canonicalized $BOX is deliberately
   # retained for every NON-query command; never canonicalize here.
