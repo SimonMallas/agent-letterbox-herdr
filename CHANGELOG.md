@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## Unreleased (Herdr edition)
+## [0.7.0] — 2026-11-07 (Herdr edition)
 
 - An update by the installer now adds the Agent Letterbox skill link that setup has made since v0.6.4, so a team set up earlier gets it without running setup again. The link is made only where setup would make it, and anything already there is left alone.
 - The README has an Updating section: how to check your version, and how to update an installer, Git or `npx skills` install.
