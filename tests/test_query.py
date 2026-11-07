@@ -205,25 +205,27 @@ class QueryTests(MailboxCase):
         self.assertEqual(self.query(compat=True)["observed_counts"]["scanned"], 0)
 
     def test_symlink_ancestor_has_specific_refusal(self):
+        # The query module pins every root component; only the CLI resolves its box.
         ancestor = self.work / "ancestor"
         ancestor.symlink_to(self.work, target_is_directory=True)
-        env = dict(self.env, LETTERBOX_DIR=str(ancestor / "store"))
-        # herdr port: query receives the RAW root (the prologue's canonicalized
-        # $BOX is retained for non-query commands only), so the bin CLI itself
-        # must surface the guard's refusal. compat: any symlinked root
-        # component is a specific named refusal.
-        result = subprocess.run([str(CLI), "query", "--compat-v2"], env=env,
+        result = subprocess.run([sys.executable, "-I", "-B", str(ROOT / "lib/query/query.py"),
+                                 "--root", str(ancestor / "store")],
                                 capture_output=True, text=True, timeout=15)
-        self.assertEqual(result.returncode, 2, (result.stdout, result.stderr))
-        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(result.returncode, 2, result.stderr)
         data = json.loads(result.stdout)
         self.assertEqual([i["code"] for i in data["issues"]], ["root_component_symlink"])
         self.assertIsNone(data["complete_counts"])
-        # strict's root binding differs by design (docs promise the compat
-        # refusal); the healthy real root still queries through the same CLI.
-        healthy = subprocess.run([str(CLI), "query"], env=self.env,
-                                 capture_output=True, text=True, timeout=15)
-        self.assertEqual(healthy.returncode, 0, (healthy.stdout, healthy.stderr))
+
+    def test_cli_resolves_a_symlinked_box(self):
+        self.letter()
+        expected = self.query(compat=True)
+        ancestor = self.work / "ancestor"
+        ancestor.symlink_to(self.work, target_is_directory=True)
+        self.env["LETTERBOX_DIR"] = str(ancestor / "store")
+        data = self.query(compat=True)
+        self.assertEqual(data["issues"], [])
+        self.assertEqual(data["complete_counts"], expected["complete_counts"])
+        self.assertIn("completeness=complete", self.query())
 
     def test_nondirectory_ancestor_retains_specific_refusal(self):
         ancestor = self.work / "not-a-directory"

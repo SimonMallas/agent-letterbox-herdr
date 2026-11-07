@@ -503,7 +503,9 @@ Use `--now` on a reply only when the original letter priority is `now`.
 
 A letter from Agent Letter Bridge is a person writing from a phone, Slack or
 Discord. `letterbox reply` cannot reach them; answer with
-`alb --reply-to <letter-id> --text "..."`, then `letterbox file <letter-id>`.
+`alb --reply-to <letter-id> --text "..."`. Agent Letter Bridge 0.7 files the
+letter once the reply is accepted; if it says unfiled, or with an older Bridge,
+run `letterbox file <letter-id>`.
 EOF
   printf 'herdr team ready: %s\n' "$BOX"
   printf 'Letterbox launcher linked: %s\n' "$launcher_target"
@@ -1038,8 +1040,11 @@ print_letter_card() { # $1=file $2=stale 0|1 $3=age — never prints the body
   print_progress_line "$f"
 }
 
-notes_map() { # [--summary]; LETTERBOX_NOTES_DIR unset: nothing to say
-  [[ -n "${LETTERBOX_NOTES_DIR:-}" ]] || return 0
+notes_map() { # [--summary]; LETTERBOX_NOTES_DIR unset: plain check says nothing
+  if [[ -z "${LETTERBOX_NOTES_DIR:-}" ]]; then
+    [[ "${1:-}" == --summary ]] || echo 'map: LETTERBOX_NOTES_DIR is not set; set it to your notes folder'
+    return 0
+  fi
   if ! command -v python3 >/dev/null 2>&1; then
     echo 'map: needs Python 3.9 or newer (python3)'
     return 0
@@ -1596,22 +1601,11 @@ cmd_query() {
   for arg in "$@"; do
     [[ "$arg" == view=* && "${1:-}" != --compat-v2 ]] && { set -- --compat-v2 "$@"; break; }
   done
-  # Query must see the RAW configured root so its guards can validate it
-  # (root_component_symlink). The prologue's canonicalized $BOX is deliberately
-  # retained for every NON-query command; never canonicalize here.
-  local query_root
-  if [[ -n "${LETTERBOX_DIR:-}" ]]; then
-    query_root="$LETTERBOX_DIR"
-  elif [[ -f "$DEFAULT_DIR_FILE" ]]; then
-    query_root="$(<"$DEFAULT_DIR_FILE")"
-  else
-    query_root="$PWD/.letterbox"
-  fi
   if [[ "${1:-}" == --compat-v2 ]]; then
     shift
-    python3 -I -B "$SCRIPT_DIR/../lib/query/query.py" --root "$query_root" "$@"
+    python3 -I -B "$SCRIPT_DIR/../lib/query/query.py" --root "$BOX" "$@"
   else
-    python3 -I -B "$SCRIPT_DIR/../lib/query/strict.py" "$query_root" "$@"
+    python3 -I -B "$SCRIPT_DIR/../lib/query/strict.py" "$BOX" "$@"
   fi
 }
 
