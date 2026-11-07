@@ -376,9 +376,10 @@ class QueryTests(MailboxCase):
         # Only ordinary shell dependencies, never a Python interpreter.
         # (herdr port: "cut" added — herdr's doorbell_token_for_id pipes
         # sha256_str through `cut -c1-8` where cmux used awk substr.)
+        # Perl is a required dependency (locks), so it is linked here on purpose.
         for name in ("bash", "dirname", "date", "mkdir", "od", "tr", "awk", "grep",
                      "mktemp", "mv", "basename", "cat", "rmdir", "rm", "shasum", "ln", "sed",
-                     "cut"):
+                     "cut", "perl"):
             target = shutil.which(name)
             self.assertIsNotNone(target, name)
             (tools / name).symlink_to(target)
