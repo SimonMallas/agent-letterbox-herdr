@@ -21,7 +21,7 @@ fi
 # Compare owned paths canonically: macOS resolves /tmp as /private/tmp and
 # LETTERBOX_DIR may itself live on a symlinked volume.
 if [[ -d "$BOX" ]]; then
-  BOX="$(cd "$BOX" && pwd -P)"
+  BOX="$(CDPATH= cd -P -- "$BOX" && pwd -P)"
 fi
 ME="${LETTERBOX_AGENT:-}"
 SESSION="${LETTERBOX_SESSION:-}"

@@ -60,7 +60,7 @@ CASES = (
     ("archive-silently-ignored", "lib/query/scanner.py",
      'self.issue(ref + "/archive", "unsupported_archive_layout")', 'pass'),
     ("cli-box-resolution-removed", "bin/letterbox",
-     '  BOX="$(cd "$BOX" && pwd -P)"', '  :'),
+     '  BOX="$(CDPATH= cd -P -- "$BOX" && pwd -P)"', '  :'),
     ("body-read", "lib/query/envelopes.py",
      'if text == "---":\n            return fields',
      'if text == "---":\n            stream.readline()\n            return fields'),
