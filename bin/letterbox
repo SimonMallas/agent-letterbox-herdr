@@ -312,6 +312,7 @@ herdr_pane_live() {
 keep_live_herdr_registrations() {
   local registry="$1" tmp line pane socket
   [[ -f "$registry" ]] || { : > "$registry"; return; }
+  acquire_lifecycle_lock "$registry"
   tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
   while IFS= read -r line || [[ -n "$line" ]]; do
     pane="$(printf '%s\n' "$line" | cut -f2)"
@@ -320,6 +321,7 @@ keep_live_herdr_registrations() {
     printf '%s\n' "$line" >> "$tmp"
   done < "$registry"
   mv "$tmp" "$registry"
+  release_lifecycle_lock
 }
 
 cmd_herdr_register() {
@@ -575,11 +577,30 @@ shell_guard_note() { # $1=agent
   printf '%s\n' "$out" | grep -m 1 '^shell-guard: unavailable' || true
 }
 
+# An agent that was not started by `herdr run` has none of the box's doorbell
+# settings, and its rings reached nobody. Use the box's own generated settings
+# when the caller supplied none; an explicit setting stays authoritative.
+load_box_doorbell() {
+  [[ -z "${LETTERBOX_DOORBELL:-}" && -f "$BOX/env.sh" ]] || return 0
+  local box="$BOX"
+  # shellcheck disable=SC1090
+  source "$BOX/env.sh"
+  export LETTERBOX_DIR="$box"
+}
+
+# One line on the agent's own check when no doorbell can ring from here.
+doorbell_line() {
+  [[ -n "${LETTERBOX_DOORBELL:-}" ]] && return 0
+  [[ -f "$BOX/env.sh" ]] && grep -q '^export LETTERBOX_DOORBELL=' "$BOX/env.sh" && return 0
+  printf 'doorbell: not set up — your --now letters ring nobody. Run: letterbox herdr setup\n'
+}
+
 ring_doorbell() {
   local to="$1" type="$2" slug="$3" id="${4:-}" token="" rc=0
   # The wrapper is the SOLE stdout owner for doorbell-outcome v=1: the
   # adapter's stdout is a private pipe (captured, never forwarded raw), and
   # exactly one contract line is emitted here.
+  load_box_doorbell
   if [[ -z "${LETTERBOX_DOORBELL:-}" ]]; then
     emit_outcome no_live_surface adapter_unavailable -
     return 0
@@ -1198,6 +1219,7 @@ cmd_check() {
   done
   # Filing and notes are this seat's own: neither line when checking another inbox.
   if [[ "$who" == "$ME" ]]; then
+    doorbell_line
     tidy_line
     notes_map --summary
   fi
@@ -1335,6 +1357,9 @@ cmd_reply() {
       parent_from="$(frontmatter_value "$msg" from)"
       expected_reply="$(inbox_path "$parent_from")/$(reply_file_for "$parent_id" "$type" "$ME")"
       if [[ -f "$expected_reply" || -f "$(processed_path "$parent_from")/$(basename "$expected_reply")" ]]; then
+        # The first attempt may have died between filing and its ring: ring
+        # again while the reply is still unread in the sender's inbox.
+        [[ "$priority" == now && -f "$expected_reply" ]] && ring_doorbell "$parent_from" "$type" "$slug" "$(frontmatter_value "$expected_reply" id)"
         printf 'already closed: %s (your %s reply is published)\n' "$(confirm_label "$msg")" "$type"
         return 0
       fi
@@ -1377,7 +1402,7 @@ cmd_reply() {
     reply_label="$(confirm_label "$REPLY_FILE")"
     release_lifecycle_lock
     trap - EXIT
-    [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
+    [[ "$priority" == now && "$REPLY_FILE" == "$(inbox_path "$doorbell_to")"/* ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
     printf 'acked: %s (in progress; reply: %s)\n' "$label" "$reply_label"
     return 0
   fi
@@ -1389,7 +1414,7 @@ cmd_reply() {
   rm -f "$msg.ack"
   release_lifecycle_lock
   trap - EXIT
-  [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
+  [[ "$priority" == now && "$REPLY_FILE" == "$(inbox_path "$doorbell_to")"/* ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
   printf 'closed: %s → %s/processed/ (reply: %s)\n' "$label" "$ME" "$reply_label"
 }
 
