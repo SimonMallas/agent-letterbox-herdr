@@ -935,7 +935,8 @@ cmd_send() {
 # Default stale threshold: 14 days of silence (last activity), not birth age.
 check_stale_secs() {
   local days="${LETTERBOX_CHECK_STALE_DAYS:-14}"
-  printf '%s\n' $((days * 86400))
+  [[ "$days" =~ ^[0-9]{1,5}$ ]] || days=14
+  printf '%s\n' $((10#$days * 86400))
 }
 
 mtime_epoch_probe() {
@@ -1153,7 +1154,7 @@ cmd_check() {
   stale_secs="$(check_stale_secs)"
   n=0
   for f in "$dir"/*.md; do
-    [[ -e "$f" ]] || break
+    [[ -e "$f" ]] || continue
     if ! id="$(frontmatter_value "$f" id)"; then
       stem="${f##*/}"; stem="${stem%.md}"
       label="$(display_id "$stem")"
