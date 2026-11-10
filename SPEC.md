@@ -263,7 +263,7 @@ Rules:
 - Match a doorbell line by prefix/pattern only and accept both shapes; exact full-line equality is a cutover BLOCK hazard that rejects the other shape mid-rollout.
 - `letterbox token <8hex>` resolves a doorbell token to `unhandled` / `already filed` / `unknown`.
 - A ring outcome is `submitted`, `pasted_not_submitted`, or `no_live_surface` — it never proves the letter was read or a turn started.
-- `priority: now` may ring a live surface; lower priorities are durable-only by default.
+- Every letter may ring a live surface; `priority: now` only marks it urgent.
 - At-most-once notification over a durable at-least-once record. Each adapter step is bounded by `LETTERBOX_DOORBELL_TIMEOUT` (default 1s), with a helper backstop of 4 × step + 5s + the Enter pause, so an unresponsive ring path cannot hang a sender; the letter is already durable.
 - Offline, busy, or unregistered agents still receive the letter in `inbox/`.
 

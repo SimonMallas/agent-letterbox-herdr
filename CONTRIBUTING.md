@@ -5,7 +5,7 @@
 **Supported**
 
 - Durable Markdown letters, reply-first handling, atomic publication, advisory locks
-- Automatic opt-in Herdr doorbells to live registered panes
+- Automatic Herdr doorbells to live registered panes, typed by default
 - Local Herdr sessions only
 
 **Not in scope**

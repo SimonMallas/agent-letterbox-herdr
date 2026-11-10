@@ -48,5 +48,5 @@ if [[ "$updated" == true ]]; then
   exit 0
 fi
 printf '\nInstalled Agent Letterbox for Herdr.\n'
-printf 'Next run:\n\n  letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells\n\n'
+printf 'Next run:\n\n  letterbox herdr setup --agents planner,reviewer,builder,researcher\n\n'
 printf 'If `letterbox` is not found, add %s to your PATH.\n' "$bin_dir"

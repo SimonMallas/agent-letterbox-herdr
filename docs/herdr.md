@@ -28,18 +28,16 @@ The terminal gets a ring; the inbox keeps the message. Doorbell delivery is best
 
 Registration refuses to silently assign the same live pane+socket pair to two agent identities.
 
-## Enable automatic agent input
+## Automatic agent input (the default)
 
-By default (submit off), the adapter prefers a Herdr notification toast and does **not** inject into the agent TUI.
-
-To inject the standardized doorbell and Enter into the live pane:
+Every letter rings. By default the adapter types the standardized doorbell and Enter into the live pane. With typing refused, it posts a Herdr notification toast and does **not** inject into the agent TUI:
 
 ```bash
 # Typing is the default (setup writes this for you); refuse it with:
 export LETTERBOX_HERDR_SUBMIT=0
 ```
 
-Setup flag `--automatic-doorbells` (alias `--submit`) turns this on in the generated environment.
+Setup writes `LETTERBOX_HERDR_SUBMIT=1` into the generated environment. The old `--automatic-doorbells` flag (alias `--submit`) is still accepted and changes nothing.
 
 Before typing anything, the adapter checks what is in front of the pane (Herdr 0.9.1 or newer):
 

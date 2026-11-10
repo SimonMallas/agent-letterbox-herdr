@@ -10,7 +10,7 @@ This is the standard Agent Letterbox setup for a live **Herdr** agent team (loca
 chmod +x bin/letterbox adapters/*.sh tests/*.sh
 export PATH="$PWD/bin:$PATH"
 
-letterbox herdr setup --agents planner,reviewer,builder,researcher --automatic-doorbells
+letterbox herdr setup --agents planner,reviewer,builder,researcher
 source ~/.agent-letterbox/env.sh
 ```
 
@@ -26,12 +26,12 @@ AGENT-LETTERBOX.md       # startup/resume instruction snippet
 
 Also links `~/.local/bin/letterbox` and `~/.agents/skills/agent-letterbox`.
 
-`--automatic-doorbells` (alias `--submit`) enables `LETTERBOX_HERDR_SUBMIT=1` — inject the doorbell line + Enter into the live agent pane. Leave it out if you only want a Herdr notification toast.
+Setup writes `LETTERBOX_HERDR_SUBMIT=1`: the doorbell line + Enter are typed into the live agent pane. If you only want a Herdr notification toast, set `LETTERBOX_HERDR_SUBMIT=0`; `check` then warns `doorbell: typing is off`. The old `--automatic-doorbells` flag (alias `--submit`) is still accepted and changes nothing.
 
 Use another shared location when needed:
 
 ```bash
-letterbox herdr setup --agents planner,reviewer --dir /shared/letterbox --automatic-doorbells
+letterbox herdr setup --agents planner,reviewer --dir /shared/letterbox
 source /shared/letterbox/env.sh
 ```
 
@@ -127,7 +127,7 @@ See [lifecycle.md](lifecycle.md) for the full state machine.
 
 ## Safety
 
-Automatic terminal input is intentionally opt-in. `LETTERBOX_HERDR_SUBMIT=1` may submit text already waiting in a target pane buffer. Use dedicated agent panes only. The doorbell contains no task content.
+Automatic terminal input is the default: every letter rings, and setup writes `LETTERBOX_HERDR_SUBMIT=1`. It may submit text already waiting in a target pane buffer, so use dedicated agent panes only. The doorbell contains no task content.
 
 ## Validate
 
