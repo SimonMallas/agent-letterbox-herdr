@@ -20,7 +20,7 @@ local Herdr terminal-agent teams.
   completion proof.
 - `letterbox herdr setup` / `run` / `register` bootstrap with live pane and
   socket registry.
-- Opt-in Herdr pane input doorbells (`LETTERBOX_HERDR_SUBMIT=1`); notification
+- Herdr pane input doorbells, typed by default (`LETTERBOX_HERDR_SUBMIT=1`; `=0` for notification
   toast when submit is off; static pane-id pattern fallback after live registry.
 - Honest doorbell outcomes — never a claim that an agent read a letter.
 - Public privacy, vocabulary, mutation, and early-abort test gates.

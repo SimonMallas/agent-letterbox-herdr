@@ -8,7 +8,7 @@ Lookup order:
    Records `agent`, `HERDR_PANE_ID`, and `HERDR_SOCKET_PATH`.
 2. Static patterns (`LETTERBOX_HERDR_PATTERNS`)
 
-Delivery (when `LETTERBOX_HERDR_SUBMIT=1`). On Herdr 0.9.1 or newer the adapter first checks what is in front of the pane and refuses a shell at its prompt:
+Delivery (typing is the default; `LETTERBOX_HERDR_SUBMIT=0` turns it off). On Herdr 0.9.1 or newer the adapter first checks what is in front of the pane and refuses a shell at its prompt:
 
 ```bash
 herdr agent prompt <pane_id> '<generic doorbell>'     # a coding agent Herdr recognises

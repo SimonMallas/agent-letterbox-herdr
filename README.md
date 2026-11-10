@@ -84,7 +84,7 @@ One shared letter store and protocol — four native doorbell adapters, one edit
 - **[cmux](https://github.com/SimonMallas/agent-letterbox-cmux)** — primary entry point
 - [tmux](https://github.com/SimonMallas/agent-letterbox-tmux)
 - [Herdr](https://github.com/SimonMallas/agent-letterbox-herdr)
-- [Zellij](https://github.com/SimonMallas/agent-letterbox-zellij) — terminal ring requires `LETTERBOX_ZELLIJ_SUBMIT=1`
+- [Zellij](https://github.com/SimonMallas/agent-letterbox-zellij) — the ring types by default; `LETTERBOX_ZELLIJ_SUBMIT=0` turns it off
 
 You are reading the **Herdr** edition.
 
@@ -345,7 +345,7 @@ printf '%s\n' 'RESULT: no critical issues; two nits in findings.md.' |
 
 Only `nack` or final `result` moves the original letter to `processed/`.
 
-> `LETTERBOX_HERDR_SUBMIT=1` (set by `--automatic-doorbells`) injects into a live pane. Use dedicated agent panes only. On Herdr 0.9.1 or newer it refuses a shell at its prompt or an agent waiting at a question, as Herdr reports them when it checks; with an older Herdr it types as before, without that check. Without it, the adapter prefers a notification toast over terminal input.
+> Typing injects into a live pane by default (`LETTERBOX_HERDR_SUBMIT=1`, written by setup; `--automatic-doorbells` still accepted). Use dedicated agent panes only. On Herdr 0.9.1 or newer it refuses a shell at its prompt or an agent waiting at a question, as Herdr reports them when it checks; with an older Herdr it types as before, without that check. `LETTERBOX_HERDR_SUBMIT=0` turns typing off — a notification toast only, and `check` warns `doorbell: typing is off`.
 
 > Before pressing Enter, Letterbox waits `LETTERBOX_DOORBELL_ENTER_DELAY` seconds (default 2, whole seconds 0–5), because some agent apps treat an Enter sent together with the text as part of a paste and never submit it. If your agent's doorbell sits typed but unsent, raise it; if your agent never needs the pause, set it to 0.
 

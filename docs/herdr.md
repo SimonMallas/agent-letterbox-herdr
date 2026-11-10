@@ -7,7 +7,7 @@ The isolated test launchers set a 24×80 PTY grid: Herdr 0.9.5 refuses a zero-si
 ```text
 letter written to inbox
 → adapters/herdr.sh finds a live registered pane (registry-first)
-→ checks what is in front of the pane, refuses a shell at its prompt  (when SUBMIT=1)
+→ checks what is in front of the pane, refuses a shell at its prompt  (typing is the default; SUBMIT=0 turns it off)
 → herdr agent prompt, or pane send-text + pane send-keys enter
 → agent checks its durable inbox
 ```
@@ -35,7 +35,8 @@ By default (submit off), the adapter prefers a Herdr notification toast and does
 To inject the standardized doorbell and Enter into the live pane:
 
 ```bash
-export LETTERBOX_HERDR_SUBMIT=1
+# Typing is the default (setup writes this for you); refuse it with:
+export LETTERBOX_HERDR_SUBMIT=0
 ```
 
 Setup flag `--automatic-doorbells` (alias `--submit`) turns this on in the generated environment.
@@ -53,7 +54,7 @@ The doorbell line keeps the v0.2 byte-prefix; v0.3 may append an opaque token (`
 ## Safety
 
 - Doorbell text is generic; no task body, paths, or secrets.
-- `LETTERBOX_HERDR_SUBMIT=1` injects into a live agent TUI — dedicated panes only.
+- Typing injects into a live agent TUI by default — dedicated panes only; `LETTERBOX_HERDR_SUBMIT=0` turns it off, and `check` warns `doorbell: typing is off`.
 - On Herdr 0.9.1 or newer, a doorbell is refused when Herdr reports a shell at its prompt or an agent waiting at a question. It is a check, not a lock: what is in front can change between the check and the typing.
 - Without SUBMIT, adapter attempts a Herdr notification toast only (not a terminal inject).
 - Doorbell success means a wake-up was submitted to a verified live target — not that the agent read or handled the letter.
