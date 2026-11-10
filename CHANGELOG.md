@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## [0.7.1] — unreleased (Herdr edition)
+## [0.7.1] — 2026-11-10 (Herdr edition)
 
 - `check` ignores a `LETTERBOX_CHECK_STALE_DAYS` that is not a whole number (such as `08`, `1.5` or a word) instead of aborting, and a broken link that sorts first in the inbox no longer hides every letter after it.
 - Every ring now uses the box's generated `env.sh` when the caller has no doorbell set, so `send`, `reply` and `nudge` from an agent that was not started by `letterbox herdr run` ring too. Before, they reported `adapter_unavailable` and rang nobody. An explicit doorbell setting still takes precedence. Your own `check` prints `doorbell: not set up` when neither the environment nor `env.sh` names a doorbell.
