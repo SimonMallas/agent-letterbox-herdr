@@ -54,7 +54,7 @@ The doorbell line keeps the v0.2 byte-prefix; v0.3 may append an opaque token (`
 - Doorbell text is generic; no task body, paths, or secrets.
 - Typing injects into a live agent TUI by default — dedicated panes only; `LETTERBOX_HERDR_SUBMIT=0` turns it off, and `check` warns `doorbell: typing is off`.
 - On Herdr 0.9.1 or newer, a doorbell is refused when Herdr reports a shell at its prompt or an agent waiting at a question. It is a check, not a lock: what is in front can change between the check and the typing.
-- Without SUBMIT, adapter attempts a Herdr notification toast only (not a terminal inject).
+- With `LETTERBOX_HERDR_SUBMIT=0`, the adapter attempts a Herdr notification toast only (not a terminal inject).
 - Doorbell success means a wake-up was submitted to a verified live target — not that the agent read or handled the letter.
 - If a safe live target cannot be verified, Letterbox prefers silent durable delivery over risky pane injection.
 

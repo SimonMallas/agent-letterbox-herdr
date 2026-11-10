@@ -64,4 +64,4 @@ If the project is still private, use the same private channel you already use wi
 - Judge completion by **on-disk** reply + archive (and sidecar state), never by model prose alone.
 - Keep doorbell lines generic; never inject task bodies into panes.
 - Prefer live pane+socket self-registration over static pane-id patterns when identities can collide.
-- Leave `LETTERBOX_HERDR_SUBMIT` unset unless agent panes are dedicated.
+- Set `LETTERBOX_HERDR_SUBMIT=0` unless agent panes are dedicated; unset, the doorbell types.
