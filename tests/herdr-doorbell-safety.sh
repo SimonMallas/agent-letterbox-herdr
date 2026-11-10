@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Mock-backed proof that adapters/herdr.sh never injects input into a live pane
-# unless the caller explicitly opts in via LETTERBOX_HERDR_SUBMIT=1.
+# Mock-backed proof that adapters/herdr.sh sends the doorbell into the resolved
+# pane by default, and that only LETTERBOX_HERDR_SUBMIT=0 stops it.
 #
 # Runs anywhere: Herdr itself is never required. The adapter resolves its binary
 # through HERDR_BIN_PATH, so we point that at a mock that logs every call.
 set -euo pipefail
+unset LETTERBOX_HERDR_SUBMIT # each case below sets it on purpose; an inherited value must not decide one
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 adapter="$root/adapters/herdr.sh"
@@ -51,29 +52,29 @@ run_adapter() {
 
 injected() { grep -qE '^pane (send-text|send-keys) ' "$MOCK_LOG"; }
 
-# --- Default (LETTERBOX_HERDR_SUBMIT unset): must never inject ---
+# --- Default (LETTERBOX_HERDR_SUBMIT unset): the doorbell is sent, then enter ---
 unset LETTERBOX_HERDR_SUBMIT || true
 run_adapter
-if injected; then
-  echo 'FAIL: herdr pane send-text/send-keys called without LETTERBOX_HERDR_SUBMIT=1' >&2
-  cat "$MOCK_LOG" >&2
-  exit 1
-fi
-grep -q '^notification show ' "$MOCK_LOG" || {
-  echo 'FAIL: expected the safe notification to still be attempted' >&2
+injected && grep -q '^pane send-keys .* enter$' "$MOCK_LOG" || {
+  echo 'FAIL: the default did not send the doorbell and enter' >&2
   cat "$MOCK_LOG" >&2
   exit 1
 }
-echo 'PASS: no input injection without opt-in'
+echo 'PASS: the doorbell is sent by default'
 
-# --- LETTERBOX_HERDR_SUBMIT=0: same as unset, must still refuse ---
+# --- LETTERBOX_HERDR_SUBMIT=0: the only way to stop typing; the notice still fires ---
 LETTERBOX_HERDR_SUBMIT=0 run_adapter
 if injected; then
   echo 'FAIL: herdr injected with LETTERBOX_HERDR_SUBMIT=0' >&2
   cat "$MOCK_LOG" >&2
   exit 1
 fi
-echo 'PASS: explicit 0 also refuses'
+grep -q '^notification show ' "$MOCK_LOG" || {
+  echo 'FAIL: expected the notification with typing off' >&2
+  cat "$MOCK_LOG" >&2
+  exit 1
+}
+echo 'PASS: explicit 0 stops typing'
 
 # --- LETTERBOX_HERDR_SUBMIT=1: MUST inject. ---
 # This is the control. Without it the two checks above could both pass because the
@@ -81,16 +82,16 @@ echo 'PASS: explicit 0 also refuses'
 # unrelated to what it claims to prove.
 LETTERBOX_HERDR_SUBMIT=1 run_adapter
 injected || {
-  echo 'FAIL: opt-in did not inject — the mock never reached the submit gate, so the' >&2
+  echo 'FAIL: explicit 1 did not inject — the mock never reached the submit gate, so the' >&2
   echo '      refusal checks above prove nothing. Fix the mock, not the adapter.' >&2
   cat "$MOCK_LOG" >&2
   exit 1
 }
 grep -q '^pane send-keys .* enter$' "$MOCK_LOG" || {
-  echo 'FAIL: opt-in sent text but never sent the enter key' >&2
+  echo 'FAIL: explicit 1 sent text but never sent the enter key' >&2
   cat "$MOCK_LOG" >&2
   exit 1
 }
-echo 'PASS: explicit opt-in injects'
+echo 'PASS: explicit 1 injects'
 
 echo 'herdr-doorbell-safety test: PASS'

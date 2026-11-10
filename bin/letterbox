@@ -312,6 +312,7 @@ herdr_pane_live() {
 keep_live_herdr_registrations() {
   local registry="$1" tmp line pane socket
   [[ -f "$registry" ]] || { : > "$registry"; return; }
+  acquire_lifecycle_lock "$registry"
   tmp="$(mktemp "$(dirname "$registry")/.herdr-agents.tmp.XXXXXX")"
   while IFS= read -r line || [[ -n "$line" ]]; do
     pane="$(printf '%s\n' "$line" | cut -f2)"
@@ -320,6 +321,7 @@ keep_live_herdr_registrations() {
     printf '%s\n' "$line" >> "$tmp"
   done < "$registry"
   mv "$tmp" "$registry"
+  release_lifecycle_lock
 }
 
 cmd_herdr_register() {
@@ -397,7 +399,7 @@ cmd_herdr_unregister() {
 }
 
 cmd_herdr_setup() {
-  local agents='' setup_dir="$HOME/.agent-letterbox" submit=false
+  local agents='' setup_dir="$HOME/.agent-letterbox"
   local skill_source="$SCRIPT_DIR/../skills/agent-letterbox"
   local skills_dir="${LETTERBOX_SKILLS_DIR:-$HOME/.agents/skills}" skill_target
   local launcher_dir="${LETTERBOX_BIN_DIR:-$HOME/.local/bin}" launcher_target
@@ -405,7 +407,7 @@ cmd_herdr_setup() {
     case "$1" in
       --agents) agents="${2:?missing comma-separated agent list}"; shift;;
       --dir) setup_dir="${2:?missing directory}"; shift;;
-      --submit|--automatic-doorbells) submit=true;;
+      --submit|--automatic-doorbells) ;; # typing is always on; kept so old commands still work
       *) die "usage: letterbox herdr setup --agents planner,reviewer,builder,researcher [--dir <path>] [--automatic-doorbells]";;
     esac
     shift
@@ -473,7 +475,7 @@ export LETTERBOX_HERDR_REGISTRY='$BOX/herdr-agents.tsv'
 export LETTERBOX_HERDR_PATTERNS='$BOX/herdr-patterns.tsv'
 export AGENT_LETTERBOX_SKILL='$skill_target'
 EOF
-  [[ "$submit" == true ]] && printf 'export LETTERBOX_HERDR_SUBMIT=1\n' >> "$BOX/env.sh"
+  printf 'export LETTERBOX_HERDR_SUBMIT=1\n' >> "$BOX/env.sh"
   cat > "$BOX/AGENT-LETTERBOX.md" <<'EOF'
 # Agent Letterbox startup rule (Herdr)
 
@@ -499,7 +501,7 @@ letterbox check
 ```
 
 For actionable letters, use `letterbox reply` with body text piped on stdin.
-Use `--now` on a reply only when the original letter priority is `now`.
+Every letter and reply rings the recipient; `--now` only marks it urgent.
 
 A letter from Agent Letter Bridge is a person writing from a phone, Slack or
 Discord. `letterbox reply` cannot reach them; answer with
@@ -514,7 +516,6 @@ EOF
   printf 'Source the environment:\n  source %s/env.sh\n' "$BOX"
   printf 'In each agent pane, launch with:\n'
   printf '  letterbox herdr run <agent-id> -- <agent-command>\n'
-  [[ "$submit" == true ]] || printf 'Automatic input is off. Re-run with --automatic-doorbells to enable it.\n'
 }
 
 cmd_herdr_run() {
@@ -575,11 +576,40 @@ shell_guard_note() { # $1=agent
   printf '%s\n' "$out" | grep -m 1 '^shell-guard: unavailable' || true
 }
 
+# An agent that was not started by `herdr run` has none of the box's doorbell
+# settings, and its rings reached nobody. Use the box's own generated settings
+# when the caller supplied none; an explicit setting stays authoritative.
+load_box_doorbell() {
+  [[ -z "${LETTERBOX_DOORBELL:-}" && -f "$BOX/env.sh" ]] || return 0
+  local box="$BOX" submit_set="${LETTERBOX_HERDR_SUBMIT+set}" submit="${LETTERBOX_HERDR_SUBMIT:-}"
+  # shellcheck disable=SC1090
+  source "$BOX/env.sh"
+  export LETTERBOX_DIR="$box"
+  # A typing setting the caller made wins over the file, as check reports it.
+  [[ -z "$submit_set" ]] || export LETTERBOX_HERDR_SUBMIT="$submit"
+}
+
+# One line on the agent's own check when no doorbell can ring from here.
+doorbell_line() {
+  local submit="${LETTERBOX_HERDR_SUBMIT:-}"
+  if [[ -z "${LETTERBOX_DOORBELL:-}" ]]; then
+    if [[ -f "$BOX/env.sh" ]] && grep -Eq '^[[:space:]]*(export[[:space:]]+)?LETTERBOX_DOORBELL=' "$BOX/env.sh"; then
+      [[ -n "$submit" ]] || submit="$(sed -nE "s/^[[:space:]]*(export[[:space:]]+)?LETTERBOX_HERDR_SUBMIT=['\"]?([^'\"[:space:]]*).*/\\2/p" "$BOX/env.sh" | tail -1)"
+    else
+      printf 'doorbell: not set up — your letters ring nobody. Run: letterbox herdr setup\n'
+      return 0
+    fi
+  fi
+  [[ "$submit" != 0 ]] || printf 'doorbell: typing is off (LETTERBOX_HERDR_SUBMIT=0) — your letters wake nobody\n'
+  return 0
+}
+
 ring_doorbell() {
   local to="$1" type="$2" slug="$3" id="${4:-}" token="" rc=0
   # The wrapper is the SOLE stdout owner for doorbell-outcome v=1: the
   # adapter's stdout is a private pipe (captured, never forwarded raw), and
   # exactly one contract line is emitted here.
+  load_box_doorbell
   if [[ -z "${LETTERBOX_DOORBELL:-}" ]]; then
     emit_outcome no_live_surface adapter_unavailable -
     return 0
@@ -928,14 +958,16 @@ cmd_send() {
   [[ -n "${body//[[:space:]]/}" ]] || die 'empty message body; pipe the body via stdin (letterbox send <to> <type> <slug> [--now])'
   local final; final="$(publish_message "$to" "$type" "$slug" "$priority" "$requires_ack" "$re" "$deadline" "$body" "$thread" "$supersedes")"
   printf 'sent: %s\n' "$final"
-  [[ "$priority" == now ]] && ring_doorbell "$to" "$type" "$slug" "$(basename "$final" .md)"
+  # Every letter rings: priority is a label for the reader, not a switch for the bell.
+  ring_doorbell "$to" "$type" "$slug" "$(basename "$final" .md)"
   return 0
 }
 
 # Default stale threshold: 14 days of silence (last activity), not birth age.
 check_stale_secs() {
   local days="${LETTERBOX_CHECK_STALE_DAYS:-14}"
-  printf '%s\n' $((days * 86400))
+  [[ "$days" =~ ^[0-9]{1,5}$ ]] || days=14
+  printf '%s\n' $((10#$days * 86400))
 }
 
 mtime_epoch_probe() {
@@ -1153,7 +1185,7 @@ cmd_check() {
   stale_secs="$(check_stale_secs)"
   n=0
   for f in "$dir"/*.md; do
-    [[ -e "$f" ]] || break
+    [[ -e "$f" ]] || continue
     if ! id="$(frontmatter_value "$f" id)"; then
       stem="${f##*/}"; stem="${stem%.md}"
       label="$(display_id "$stem")"
@@ -1197,6 +1229,7 @@ cmd_check() {
   done
   # Filing and notes are this seat's own: neither line when checking another inbox.
   if [[ "$who" == "$ME" ]]; then
+    doorbell_line
     tidy_line
     notes_map --summary
   fi
@@ -1334,6 +1367,9 @@ cmd_reply() {
       parent_from="$(frontmatter_value "$msg" from)"
       expected_reply="$(inbox_path "$parent_from")/$(reply_file_for "$parent_id" "$type" "$ME")"
       if [[ -f "$expected_reply" || -f "$(processed_path "$parent_from")/$(basename "$expected_reply")" ]]; then
+        # The first attempt may have died between filing and its ring: ring
+        # again while the reply is still unread in the sender's inbox.
+        [[ -f "$expected_reply" ]] && ring_doorbell "$parent_from" "$type" "$slug" "$(frontmatter_value "$expected_reply" id)"
         printf 'already closed: %s (your %s reply is published)\n' "$(confirm_label "$msg")" "$type"
         return 0
       fi
@@ -1376,7 +1412,7 @@ cmd_reply() {
     reply_label="$(confirm_label "$REPLY_FILE")"
     release_lifecycle_lock
     trap - EXIT
-    [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
+    [[ "$REPLY_FILE" == "$(inbox_path "$doorbell_to")"/* ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
     printf 'acked: %s (in progress; reply: %s)\n' "$label" "$reply_label"
     return 0
   fi
@@ -1388,7 +1424,7 @@ cmd_reply() {
   rm -f "$msg.ack"
   release_lifecycle_lock
   trap - EXIT
-  [[ "$priority" == now && "$REPLY_ALREADY" == false ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
+  [[ "$REPLY_FILE" == "$(inbox_path "$doorbell_to")"/* ]] && ring_doorbell "$doorbell_to" "$type" "$slug" "$(frontmatter_value "$REPLY_FILE" id)"
   printf 'closed: %s → %s/processed/ (reply: %s)\n' "$label" "$ME" "$reply_label"
 }
 
@@ -1529,14 +1565,9 @@ cmd_ring() {
     emit_outcome no_live_surface surface_not_found -
     return 0
   fi
-  # Bridge services do not inherit a pane's setup environment. Use this
-  # mailbox's generated adapter configuration only when the caller supplied
-  # none; explicit service configuration remains authoritative.
-  if [[ -z "${LETTERBOX_DOORBELL:-}" && -f "$BOX/env.sh" ]]; then
-    # shellcheck disable=SC1090
-    source "$BOX/env.sh"
-    BOX="${LETTERBOX_DIR:-$BOX}"
-  fi
+  # Bridge services do not inherit a pane's setup environment: ring_doorbell
+  # reads this mailbox's generated env.sh when the caller supplied no doorbell,
+  # with the same rule as send and reply (the caller's box stays the box).
   need_agent "$to"
   case "$typ" in request|delegate|status|blocker|result|ack|nack|info) ;; *) die "invalid message type: $typ";; esac
   [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid letter id"

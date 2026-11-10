@@ -9,7 +9,7 @@
 #   2) LETTERBOX_HERDR_PATTERNS (static fallback)
 #      agent<TAB>pane_id
 #
-# Submit is opt-in: LETTERBOX_HERDR_SUBMIT=1 sends text + enter into the pane,
+# By default the doorbell is sent as text + enter into the pane,
 # after the shell-foreground guard below on Herdr 0.9.1+.
 # Uses Herdr 0.9.1 CLI (pane get / process-info / send-text / send-keys,
 # agent get / prompt, status server; guard verified live 2026-10-28)
@@ -245,7 +245,7 @@ fi
 
 if [[ "$probe" == true ]]; then
   # For letterbox check: only a typing doorbell needs the guard.
-  [[ "${LETTERBOX_HERDR_SUBMIT:-0}" == 1 ]] || exit 0
+  [[ "${LETTERBOX_HERDR_SUBMIT:-1}" != 0 ]] || exit 0
   if guard_floor_met; then
     printf 'shell-guard: available\n'
   else
@@ -254,8 +254,11 @@ if [[ "$probe" == true ]]; then
   exit 0
 fi
 
-# Input injection is explicit opt-in: Enter can submit unrelated buffer text.
-if [[ "${LETTERBOX_HERDR_SUBMIT:-0}" == 1 ]]; then
+# Typing the line and pressing Enter is the doorbell: without it the agent does
+# not wake. Enter can also submit text already typed in that pane; that risk is
+# accepted. Only an explicit LETTERBOX_HERDR_SUBMIT=0 stops typing, and the agent's own check
+# then warns.
+if [[ "${LETTERBOX_HERDR_SUBMIT:-1}" != 0 ]]; then
   floor_ec=0
   guard_floor_met || floor_ec=$?
   [[ "$floor_ec" -eq 124 ]] && { emit_outcome no_live_surface helper_timeout -; exit 0; }

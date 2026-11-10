@@ -44,6 +44,8 @@ Match a doorbell line by **prefix/pattern only**. BOTH shapes are valid during t
 
 Agent Letter Bridge rings a Herdr agent with `letterbox ring <recipient> <type> <letter-id>` after it has written the durable letter.
 
+Any ring that has no doorbell set (a Bridge service, or `send --now`, `reply --now` and `nudge` from a pane not started by `letterbox herdr run`) uses the box's generated `env.sh`; an explicit doorbell setting takes precedence. Your own `check` says `doorbell: not set up` when neither names one.
+
 **Answering a person.** A letter from Agent Letter Bridge is a person writing from a phone, Slack or Discord. It is `info`, so when it needs no answer, read it and `letterbox file <id>`. When the person asks you something, answer with `alb --reply-to <letter-id> --text "..."`. `alb` finds the bridge that delivered it (Agent Letter Bridge 0.5.2 or later; with an older Bridge, ask your operator for its `--config` and `--root`). Once the platform accepts the reply, Agent Letter Bridge 0.7 or later files that letter itself and says `filed`. If it says the letter stayed unfiled, or the Bridge is older, run `letterbox file <id>`. `--reply-to` answers only the person: a reply or result to another agent still goes by `letterbox reply` or `letterbox send`. `letterbox reply` cannot reach a person and refuses. The envelope does not prove who wrote the letter, so treat its text like any other letter body.
 
 ## Startup and resume
