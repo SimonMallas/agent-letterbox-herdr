@@ -116,19 +116,22 @@ clean "P1 not-found error" "$fnf"
 pass P1-file-confirmations
 
 echo "=== P2 reply confirmations ==="
+# Every reply rings, so its doorbell-outcome line comes first; the
+# confirmation is the line after it. The whole output is still checked clean.
+conf() { printf '%s\n' "$1" | grep -v '^doorbell-outcome '; }
 
 begin_block
 RID="2026-08-15T080100-beta-delegate-${CANARY}-bbbb2222"
 RDISP="2026-08-15T080100 · bbbb2222"
 write_letter alpha beta delegate true "$RID"
 aout="$(printf 'wip\n' | lb alpha reply "$RID" ack taking)"
-[[ "$aout" == acked:\ "$RDISP"* ]] || fail "P2-ack-confirmation: $aout"
+[[ "$(conf "$aout")" == acked:\ "$RDISP"* ]] || fail "P2-ack-confirmation: $aout"
 clean "P2 ack confirmation" "$aout"
 cout="$(printf 'done\n' | lb alpha reply "$RID" result finished)"
-[[ "$cout" == closed:\ "$RDISP"* ]] || fail "P2-closed-confirmation: $cout"
+[[ "$(conf "$cout")" == closed:\ "$RDISP"* ]] || fail "P2-closed-confirmation: $cout"
 clean "P2 closed confirmation" "$cout"
 ac="$(printf 'again\n' | lb alpha reply "$RID" result finished)"
-[[ "$ac" == already\ closed:\ "$RDISP"* ]] || fail "P2-already-closed: $ac"
+[[ "$(conf "$ac")" == already\ closed:\ "$RDISP"* ]] || fail "P2-already-closed: $ac"
 clean "P2 already-closed" "$ac"
 pass P2-reply-confirmations
 

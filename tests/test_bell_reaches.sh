@@ -73,5 +73,23 @@ printf 'done\n' | LETTERBOX_AGENT=beta "$letterbox" reply "$id" result finished 
 [[ "$(rings)" == $((before + 2)) ]] && ok "no ring for a reply the sender has filed" || bad "rang for a reply already filed"
 rm -f "$tmp/bin/mv"
 
+# Every letter rings: a send or reply without --now rings too.
+printf "export LETTERBOX_DIR='%s'\nexport LETTERBOX_DOORBELL='%s'\n" "$tmp/box" "$tmp/bell.sh" > "$tmp/box/env.sh"
+before="$(rings)"
+sent="$(printf 'plain\n' | LETTERBOX_AGENT=alpha "$letterbox" send beta request plain --ack 2>&1)"
+[[ "$sent" == *"outcome=submitted"* && "$(rings)" == $((before + 1)) ]] && ok "a send without --now rings" || bad "a send without --now did not ring: $sent"
+pid="$(basename "$(printf '%s\n' "$sent" | sed -n 's/^sent: //p')" .md)"
+out="$(printf 'taking it\n' | LETTERBOX_AGENT=beta "$letterbox" reply "$pid" ack plain-ack 2>&1)"
+[[ "$out" == *"outcome=submitted"* && "$(rings)" == $((before + 2)) ]] && ok "a reply without --now rings" || bad "a reply without --now did not ring: $out"
+out="$(printf 'done\n' | LETTERBOX_AGENT=beta "$letterbox" reply "$pid" result plain-done 2>&1)"
+[[ "$out" == *"outcome=submitted"* && "$(rings)" == $((before + 3)) ]] && ok "a result without --now rings" || bad "a result without --now did not ring: $out"
+
+# check says so loudly when typing has been switched off.
+printf 'export LETTERBOX_HERDR_SUBMIT=0\n' >> "$tmp/box/env.sh"
+out="$(LETTERBOX_AGENT=beta "$letterbox" check 2>&1)"
+[[ "$out" == *"doorbell: typing is off"* ]] && ok "check warns when typing is off in env.sh" || bad "no warning for typing off in env.sh"
+out="$(LETTERBOX_AGENT=beta LETTERBOX_DOORBELL="$tmp/bell.sh" LETTERBOX_HERDR_SUBMIT=0 "$letterbox" check 2>&1)"
+[[ "$out" == *"doorbell: typing is off"* ]] && ok "check warns when typing is off in the environment" || bad "no warning for typing off in the environment"
+
 [[ "$fails" -eq 0 ]] || exit 1
 echo 'bell reaches: PASS'
