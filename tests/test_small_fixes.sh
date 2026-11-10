@@ -41,5 +41,11 @@ ln -s "$tmp/nowhere.md" "$tmp/box/beta/inbox/0000-dangling.md"
 out="$(LETTERBOX_AGENT=beta "$letterbox" check)"
 [[ "$out" == *"$tok"* ]] && ok "check reads past a dangling symlink" || bad "check stopped at a dangling symlink"
 
+# A doorbell assigned without 'export' in env.sh still counts as set up.
+mkdir -p "$tmp/plain/p1/inbox" "$tmp/plain/p1/processed"
+printf "LETTERBOX_DOORBELL='%s/adapters/noop.sh'\n" "$root" > "$tmp/plain/env.sh"
+out="$(LETTERBOX_DIR="$tmp/plain" LETTERBOX_AGENT=p1 "$letterbox" check 2>&1)"
+[[ "$out" != *"doorbell: not set up"* ]] && ok "unexported doorbell line is not a false warning" || bad "false 'not set up' for an unexported doorbell line"
+
 [[ "$fails" -eq 0 ]] || exit 1
 echo 'small fixes: PASS'
