@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Mock-backed proof that adapters/herdr.sh never injects input into a live pane
-# unless the caller explicitly opts in via LETTERBOX_HERDR_SUBMIT=1.
+# Mock-backed proof that adapters/herdr.sh sends the doorbell into the resolved
+# pane by default, and that only LETTERBOX_HERDR_SUBMIT=0 stops it.
 #
 # Runs anywhere: Herdr itself is never required. The adapter resolves its binary
 # through HERDR_BIN_PATH, so we point that at a mock that logs every call.
 set -euo pipefail
+unset LETTERBOX_HERDR_SUBMIT # each case below sets it on purpose; an inherited value must not decide one
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 adapter="$root/adapters/herdr.sh"
@@ -81,13 +82,13 @@ echo 'PASS: explicit 0 stops typing'
 # unrelated to what it claims to prove.
 LETTERBOX_HERDR_SUBMIT=1 run_adapter
 injected || {
-  echo 'FAIL: opt-in did not inject — the mock never reached the submit gate, so the' >&2
+  echo 'FAIL: explicit 1 did not inject — the mock never reached the submit gate, so the' >&2
   echo '      refusal checks above prove nothing. Fix the mock, not the adapter.' >&2
   cat "$MOCK_LOG" >&2
   exit 1
 }
 grep -q '^pane send-keys .* enter$' "$MOCK_LOG" || {
-  echo 'FAIL: opt-in sent text but never sent the enter key' >&2
+  echo 'FAIL: explicit 1 sent text but never sent the enter key' >&2
   cat "$MOCK_LOG" >&2
   exit 1
 }
