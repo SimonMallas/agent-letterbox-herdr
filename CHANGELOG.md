@@ -2,7 +2,7 @@
 
 All notable changes to Agent Letterbox for Herdr are documented here.
 
-## Unreleased (Herdr edition)
+## [0.7.2] — 2026-11-16 (Herdr edition)
 
 - Both query modes recheck each letter’s identity and read its header a second time before reporting complete. These checks are best-effort and do not make a snapshot; queries on large mailboxes take roughly 1.7 to 2 times as long.
 
