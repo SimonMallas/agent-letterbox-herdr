@@ -195,6 +195,13 @@ resolve_action_ref() {
   case "$arg" in
     /*|./*|../*|*/*) die "use a letter id, display id, or unique token, not a path";;
   esac
+  if [[ -f "$SCRIPT_DIR/../lib/fast/fastpath.py" ]] && command -v python3 >/dev/null 2>&1; then
+    local fast_path
+    if fast_path="$(python3 -I -B "$SCRIPT_DIR/../lib/fast/fastpath.py" resolve "$BOX" "$arg" "$scope" "$ME" true)"; then
+      printf '%s\n' "$fast_path"
+      return 0
+    fi
+  fi
   case "$scope" in
     own-inbox) dirs=("$(inbox_path "$ME")");;
     owned) dirs=("$(inbox_path "$ME")" "$(processed_path "$ME")");;
@@ -1183,6 +1190,23 @@ cmd_check() {
   local -a live_rows=() stale_rows=()
   now="$(date -u +%s)"
   stale_secs="$(check_stale_secs)"
+  local fast_output days="${LETTERBOX_CHECK_STALE_DAYS:-14}"
+  if [[ -f "$SCRIPT_DIR/../lib/fast/fastpath.py" ]] && command -v python3 >/dev/null 2>&1 &&
+      fast_output="$(python3 -I -B "$SCRIPT_DIR/../lib/fast/fastpath.py" check "$dir" "$who" "$now" "$stale_secs" "$days" "$recent" label)"; then
+    local fast_line
+    while IFS= read -r fast_line; do
+      printf '%s\n' "$fast_line"
+      case "$fast_line" in
+        "── $who inbox:"*) shell_guard_note "$who";;
+      esac
+    done <<< "$fast_output"
+    if [[ "$who" == "$ME" ]]; then
+      doorbell_line
+      tidy_line
+      notes_map --summary
+    fi
+    return 0
+  fi
   n=0
   for f in "$dir"/*.md; do
     [[ -e "$f" ]] || continue
