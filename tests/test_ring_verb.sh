@@ -38,6 +38,7 @@ printf -- '---\nid: %s\nfrom: chat-bridge\nto: agent\ntype: info\n---\nhello\n' 
 cat > "$ROOT/lb" <<SH
 #!/usr/bin/env bash
 export PATH="$ROOT/bin:\$PATH" HERDR_FAKE_LOG="$ROOT/herdr.log"
+unset HERDR_BIN_PATH
 export LETTERBOX_DIR="$ROOT/box"
 if [[ "${NO_CONFIG:-}" != 1 ]]; then
   export LETTERBOX_DOORBELL="$EDITION/adapters/herdr.sh"

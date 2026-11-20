@@ -36,9 +36,11 @@ resolve_box() {
 
 # Print the Letterbox agent registered for a Herdr pane on this server, or nothing.
 agent_for_pane() { # $1 = pane id, $2 = socket path
-  local pane="$1" socket="$2"
+  local pane="$1" socket="$2" status_out status_rc=0
   [[ -n "$pane" && -n "$socket" ]] || return 0
-  "$LB" herdr status 2>/dev/null \
+  status_out="$("$LB" herdr status 2>/dev/null)" || status_rc=$?
+  (( status_rc == 0 )) || return "$status_rc"
+  printf '%s\n' "$status_out" \
     | awk -F '\t' -v pane="$pane" -v sock="$socket" 'NR > 1 && $2 == pane && $3 == sock { print $1; exit }'
 }
 

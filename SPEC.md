@@ -264,17 +264,19 @@ Rules:
 - `letterbox token <8hex>` resolves a doorbell token to `unhandled` / `already filed` / `unknown`.
 - A ring outcome is `submitted`, `pasted_not_submitted`, or `no_live_surface` — it never proves the letter was read or a turn started.
 - Every letter may ring a live surface; `priority: now` only marks it urgent.
-- At-most-once notification over a durable at-least-once record. Each adapter step is bounded by `LETTERBOX_DOORBELL_TIMEOUT` (default 1s), with a helper backstop of 4 × step + 5s + the Enter pause, so an unresponsive ring path cannot hang a sender; the letter is already durable.
+- At-most-once notification over a durable at-least-once record. Each adapter step is bounded by `LETTERBOX_DOORBELL_TIMEOUT` (default 1s), with a helper backstop of 7 × step + 5s + the Enter pause, so an unresponsive ring path cannot hang a sender; the letter is already durable.
 - Offline, busy, or unregistered agents still receive the letter in `inbox/`.
 
 Bounds budget (ring path). `LETTERBOX_DOORBELL_TIMEOUT` (default **1s**) bounds
 each mux call (liveness, notify, text, Enter). The longest legitimate run is
-3–4 steps (liveness + text + Enter, or a notify-only path) ≈ 4 × step. The
-wrapper's whole-run backstop is 4 × step + 5s spawn margin + the Enter pause = **11s** at the defaults. A healthy ring takes about the pause plus
+3–4 steps (liveness + text + Enter, or a notify-only path). The
+wrapper's whole-run backstop is 7 × step + 5s spawn margin + the Enter pause = **14s** at the defaults. A healthy ring takes about the pause plus
 one second. Agent Letter Bridge 0.5.2 and earlier allow the whole ring 10s, so there a
 ring that is already wedged reads as unconfirmed slightly early. Configuration limit: keep `LETTERBOX_DOORBELL_TIMEOUT` at 1s (integer
 seconds); raising it outruns the caller deadline unless this budget is
 re-derived. Unset or empty means the default. Any other value must be whole seconds from 1 to 999 with no leading zero, or it is refused as `invalid_timeout` before any mux call, through `letterbox ring` as well.
+
+A proven pre-injection `helper_timeout` is tried again by the wrapper: 3 lookups, 100 ms then 400 ms apart. The call returns within 12s. The per-attempt formula in the wrapper is 7 × step + 5s + the pause (14s at the defaults). The 12s return budget takes the minimum, so the first attempt's backstop is 12s, and a step that cannot finish inside the time still left is not started. The adapter's default step cap stays 1s. A floor, occupant, or front timeout is also `helper_timeout` before any text, so the wrapper tries those again too. A timeout after text or the agent prompt starts stays `unconfirmed` and is not tried again. If the lookups are exhausted, the wrapper writes `.unresolved-rings/<recipient>/<letter-id>` (the record reason stays `helper_timeout`) and tells the sender to nudge. The contract line is `lookup_spent`, not `helper_timeout`. `helper_timeout` means this process did not spend a lookup retry, so a caller that retries only that reason may try again. `lookup_spent` means the wrapper already did. A wrapper that still emits `helper_timeout` is unchanged. If that record cannot be written, it does not say to nudge, the diagnostic has no path, and the contract line is still `lookup_spent`. The record is live only while that letter is still a regular file in the recipient's inbox. Filing it removes the record. `check` names the ring only while the letter is still there, and removes a record whose letter has left.
 
 Enter pause. The adapter waits `LETTERBOX_DOORBELL_ENTER_DELAY` (default **2s**, whole
 seconds 0–5, 0 for no pause) between the doorbell text and its Enter; any other value

@@ -111,6 +111,24 @@ printf '%s\n' "$out" | grep -q 'No Letterbox found' || fail "no-box message miss
 [[ ! -e "$root/.letterbox" && ! -e "$root/plugin/.letterbox" ]] || fail "plugin created a .letterbox in its own tree"
 printf '%s\n' 'plugin view (no box): PASS'
 
+# --- G-popup: a refused box is not empty, unregistered, or silently cleaned up ---
+printf 'month-v2\n' > "$box/format.mark"
+out="$(view "$p2")"
+printf '%s\n' "$out" | grep -q 'could not read this box' || fail "refused box was not reported: $out"
+printf '%s\n' "$out" | grep -q 'unsupported format' || fail "refused box did not name the format problem: $out"
+printf '%s\n' "$out" | grep -q 'parser-review' && fail "refused box showed letter content: $out"
+printf '%s\n' "$out" | grep -q 'not registered as a Letterbox agent' && fail "refused box misreported the pane as unregistered: $out"
+event_out="$(env -u LETTERBOX_DIR HERDR_PLUGIN_ROOT="$root" HERDR_SOCKET_PATH="$socket" \
+  HERDR_PLUGIN_EVENT=pane.closed HERDR_PLUGIN_EVENT_JSON="{\"event\":\"pane_closed\",\"data\":{\"pane_id\":\"$p2\"}}" \
+  bash "$root/plugin/on-pane-gone.sh" 2>&1)"
+printf '%s\n' "$event_out" | grep -q 'could not inspect registrations; registration unchanged' \
+  || fail "refused close event did not report uncertainty: $event_out"
+grep -q $'^alpha\t'"$p2"$'\t' "$reg" || fail "refused close event removed the registration"
+rm -f "$box/format.mark"
+out="$(view "$p2")"
+printf '%s\n' "$out" | grep -qE '^  .* from beta +request +parser-review' || fail "view did not recover after removing the mark: $out"
+printf '%s\n' 'plugin view (refused box is visible): PASS'
+
 # --- F2: untrusted progress notes never pass control sequences through ---
 printf 'Tracked task.\n' | LETTERBOX_DIR="$box" LETTERBOX_AGENT=beta "$letterbox" send alpha request tracked-task --ack >/dev/null
 id="$(ls "$box/alpha/inbox/" | grep 'tracked-task' | grep -v '\.ack$' | head -1 | sed 's/\.md$//')"

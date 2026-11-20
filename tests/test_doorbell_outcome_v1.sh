@@ -53,6 +53,9 @@ exit 0
 HERDR
 chmod +x "$ROOT/bin/herdr"
 export PATH="$ROOT/bin:$PATH"
+# A herdr pane exports HERDR_BIN_PATH, and the adapter prefers it over PATH.
+# Leave it unset here so the fake on PATH is the one the test calls.
+unset HERDR_BIN_PATH
 export HERDR_FAKE_LOG="$ROOT/herdr.log"
 export LETTERBOX_DOORBELL="$EDITION/adapters/herdr.sh"
 export LETTERBOX_HERDR_SUBMIT=1
@@ -172,7 +175,7 @@ else
   echo "FAIL: injected line carries sender + v0.3 token"; cat "$HERDR_FAKE_LOG"; exit 1
 fi
 check "pane get timeout → helper_timeout" "HERDR_FAKE_GET=sleep HERDR_FAKE_SLEEP=5" \
-  'doorbell-outcome v=1 outcome=no_live_surface reason=helper_timeout target=-'
+  'doorbell-outcome v=1 outcome=no_live_surface reason=lookup_spent target=-'
 check "pane dead → surface_not_found"    "HERDR_FAKE_GET=fail" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=surface_not_found target=-'
 check "patterns fallback → submitted"    "LETTERBOX_HERDR_REGISTRY=$ROOT/missing.tsv LETTERBOX_HERDR_PATTERNS=$ROOT/patterns.tsv" \
@@ -226,8 +229,8 @@ check "wrapper: valid line + nonzero exit → unconfirmed" "LETTERBOX_DOORBELL=$
   'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
 check "wrapper: pasted + nonzero exit → unconfirmed" "LETTERBOX_DOORBELL=$ROOT/valid-pasted-exit1.sh" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=unconfirmed target=-'
-check "wrapper: helper_timeout + nonzero exit still forwards (retryable)" "LETTERBOX_DOORBELL=$ROOT/valid-ht-exit1.sh" \
-  'doorbell-outcome v=1 outcome=no_live_surface reason=helper_timeout target=-'
+check "wrapper: helper_timeout is spent, not forwarded" "LETTERBOX_DOORBELL=$ROOT/valid-ht-exit1.sh" \
+  'doorbell-outcome v=1 outcome=no_live_surface reason=lookup_spent target=-'
 check "wrapper: send_failed + nonzero exit still forwards (named reason)" "LETTERBOX_DOORBELL=$ROOT/valid-sf-exit1.sh" \
   'doorbell-outcome v=1 outcome=no_live_surface reason=send_failed target=-'
 # Runner-owned sentinel: a child exiting 124 on its own is NOT a timeout.

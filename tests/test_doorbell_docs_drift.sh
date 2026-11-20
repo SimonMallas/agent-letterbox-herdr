@@ -106,11 +106,24 @@ emit_real() {
       sed -n 's/^send-keys -t %1 -l //p' "$log" | head -1
       ;;
     herdr)
-      MOCK_LOG="$log" HERDR_BIN_PATH="$work/bin/herdr" \
-        LETTERBOX_DIR="$inv_dir" LETTERBOX_HERDR_PATTERNS="$work/patterns.tsv" \
-        LETTERBOX_HERDR_SUBMIT=1 LETTERBOX_DOORBELL_FROM="$from" \
-        "$adapter" "$inv_to" "$inv_type" someslug ${tok:+"$tok"} >/dev/null 2>&1 || true
-      sed -n 's/^pane send-text %1 //p' "$log" | head -1
+      local outcome="$work/adapter.out" error="$work/adapter.err" rc=0 line
+      env -i PATH="$work/bin:$PATH" HOME="$work" TMPDIR="$work" LC_ALL=C \
+        MOCK_LOG="$log" HERDR_BIN_PATH="$work/bin/herdr" LETTERBOX_DIR="$inv_dir" \
+        LETTERBOX_HERDR_PATTERNS="$work/patterns.tsv" LETTERBOX_HERDR_SUBMIT=1 \
+        LETTERBOX_DOORBELL_FROM="$from" \
+        LETTERBOX_DOORBELL_TIMEOUT=10 LETTERBOX_DOORBELL_ENTER_DELAY=0 \
+        "$adapter" "$inv_to" "$inv_type" someslug ${tok:+"$tok"} >"$outcome" 2>"$error" || rc=$?
+      line="$(sed -n 's/^pane send-text %1 //p' "$log" | head -1)"
+      if [[ "$rc" -ne 0 || -z "$line" ]] || ! grep -q '^doorbell-outcome v=1 outcome=submitted ' "$outcome"; then
+        printf 'FAIL: mock adapter capture failed (exit %s)\nadapter outcome:\n' "$rc" >&2
+        cat "$outcome" >&2
+        printf 'adapter stderr:\n' >&2
+        cat "$error" >&2
+        printf 'mock log:\n' >&2
+        cat "$log" >&2
+        return 0
+      fi
+      printf '%s\n' "$line"
       ;;
     zellij)
       MOCK_LOG="$log" ZELLIJ_BIN_PATH="$work/bin/zellij" \
@@ -129,7 +142,7 @@ real_v03="$(emit_real a1b2c3d4)"
 real_v04="$(emit_real '' "$inv_from")"
 real_v04t="$(emit_real a1b2c3d4 "$inv_from")"
 if [[ -z "$real_v02" || -z "$real_v03" || -z "$real_v04" || -z "$real_v04t" ]]; then
-  echo "FAIL: adapter produced no line — gate would be vacuous" >&2
+  echo "FAIL: mock adapter capture failed — see diagnostics above" >&2
   exit 1
 fi
 

@@ -17,7 +17,12 @@ if ! resolve_box; then
   finish
 fi
 pane="$(focused_pane)"
-agent="$(agent_for_pane "$pane" "${HERDR_SOCKET_PATH:-}")"
+agent_status=0
+agent="$(agent_for_pane "$pane" "${HERDR_SOCKET_PATH:-}")" || agent_status=$?
+if [[ "$agent_status" -ne 0 ]]; then
+  printf 'Agent Letterbox\n\nLetterbox could not read this box. It may have an unsupported format.\nNo inbox or registration contents are shown.\n'
+  finish
+fi
 hours="${LETTERBOX_PLUGIN_OVERDUE_HOURS:-24}"
 hours_note=''
 if ! [[ "$hours" =~ ^[0-9]+([.][0-9]+)?$ ]] || [[ "$hours" =~ ^0+([.]0+)?$ ]]; then
@@ -33,18 +38,23 @@ fi
 
 # One line per letter; control characters stripped as a second layer.
 listing() { # filters...
+  local query_out query_status=0
   # Whole team scope: an answer lives in the SENDER's mailbox, so narrowing the scan to
   # this agent would hide it. to=<agent> only filters what is shown.
-  LETTERBOX_AGENT="$agent" "$LB" query --compat-v2 to="$agent" "$@" 2>/dev/null \
-    | python3 "$here/brief.py" | LC_ALL=C tr -d '\000-\011\013-\037\177' | LC_ALL=C sed $'s/\xc2[\x80-\x9f]//g'
+  query_out="$(LETTERBOX_AGENT="$agent" "$LB" query --compat-v2 to="$agent" "$@" 2>/dev/null)" || query_status=$?
+  if [[ "$query_status" -ne 0 ]]; then
+    printf '  Letterbox could not read this box. It may have an unsupported format; no letters are shown.\n'
+    return 1
+  fi
+  printf '%s\n' "$query_out" | python3 "$here/brief.py" | LC_ALL=C tr -d '\000-\011\013-\037\177' | LC_ALL=C sed $'s/\xc2[\x80-\x9f]//g'
 }
 until_ts="$(python3 -c 'import datetime,sys; t=datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=float(sys.argv[1])); print(t.strftime("%Y-%m-%dT%H:%M:%SZ"))' "$hours")"
 printf 'Agent Letterbox: %s   (box %s)\n\n' "$agent" "$LETTERBOX_DIR"
 [[ -n "$hours_note" ]] && printf '%s\n\n' "$hours_note"
 printf 'Inbox (open letters to %s)\n' "$agent"
-listing state=open
+listing state=open || finish
 printf '\nWhat I owe (open requests, no answer yet)\n'
-listing state=open answered=no type=request
+listing state=open answered=no type=request || finish
 printf '\nOverdue (open, unanswered, sent more than %s h ago)\n' "$hours"
-listing state=open answered=no type=request until="$until_ts"
+listing state=open answered=no type=request until="$until_ts" || finish
 finish

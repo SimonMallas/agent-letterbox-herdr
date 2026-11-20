@@ -9,7 +9,12 @@ resolve_box || { printf 'agent-letterbox: no Letterbox found; nothing to clean u
 # The event payload names the pane that closed; fall back to HERDR_PANE_ID only if absent.
 pane="$(python3 -c 'import json,os; d=json.loads(os.environ.get("HERDR_PLUGIN_EVENT_JSON") or "{}").get("data",{}); print(d.get("pane_id") or (d.get("pane") or {}).get("pane_id",""), end="")')"
 pane="${pane:-${HERDR_PANE_ID:-}}"
-agent="$(agent_for_pane "$pane" "${HERDR_SOCKET_PATH:-}")"
+agent_status=0
+agent="$(agent_for_pane "$pane" "${HERDR_SOCKET_PATH:-}")" || agent_status=$?
+if [[ "$agent_status" -ne 0 ]]; then
+  printf 'agent-letterbox: could not inspect registrations; registration unchanged\n'
+  exit 0
+fi
 if [[ -n "$agent" ]]; then
   # Guarded: removes the row only if the agent is still on THIS pane and socket.
   result="$("$LB" herdr unregister "$agent" --pane "$pane" --socket "${HERDR_SOCKET_PATH:-}")"
