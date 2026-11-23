@@ -4,6 +4,8 @@
 
 ## Ring the bell. Create the team. Build the memories.
 
+**[Install](#install)**
+
 **Letterbox does not make agents write. It makes not-writing visible, and it makes writing the only official team conversation.** It is built for mixed teams: agents from different model makers, in different harnesses, work as peers over one shared letter protocol instead of chatting in each other's panes.
 
 ### The 60-second evaluation
@@ -229,6 +231,10 @@ Agent Letterbox for Herdr is local-only and purpose-built for live Herdr agent t
 **If you are an agent,** read [the operating manual](skills/agent-letterbox/SKILL.md) first: doorbells, replies and the safety rules. ([More below](#learn-more).)
 
 Whenever this guide shows a command block, copy the whole block, paste it into a terminal, and press Enter.
+
+Or give this prompt to an agent you already work with:
+
+> Set up Agent Letterbox for Herdr using https://github.com/SimonMallas/agent-letterbox-herdr. Read and follow the README Quick Start without changing my Herdr layout. Configure it for my existing agents, keep everything local, and show me the resulting Letterbox directory and how to start using it. Do not push or publish anything.
 
 ### Or: add the skill straight to your agent
 
