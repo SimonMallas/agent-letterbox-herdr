@@ -228,6 +228,8 @@ Agent Letterbox for Herdr is local-only and purpose-built for live Herdr agent t
 
 **If you are an agent,** read [the operating manual](skills/agent-letterbox/SKILL.md) first: doorbells, replies and the safety rules. ([More below](#learn-more).)
 
+Whenever this guide shows a command block, copy the whole block, paste it into a terminal, and press Enter.
+
 ### Or: add the skill straight to your agent
 
 ```bash
